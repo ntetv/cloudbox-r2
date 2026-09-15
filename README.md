@@ -6,6 +6,10 @@
 
 部署时，Worker 和 Durable Object classes 由 Wrangler 按配置创建或绑定；R2 bucket 需要先创建，再通过 `wrangler.toml` 中的 `BUCKET` binding 连接。
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/ntetv/cloudbox-r2)
+
+当前按钮仅提供部署快捷入口；仓库为私有且尚未满足按钮自动部署所需配置，请按下文手动部署步骤操作。
+
 ## 核心能力
 
 - R2 文件和目录浏览、搜索、分页、复制、删除与 Metadata 管理
