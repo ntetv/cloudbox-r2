@@ -1,0 +1,69 @@
+{
+	"name": "cloudbox-r2",
+	"version": "1.0.0",
+	"description": "A self-hosted file management interface for Cloudflare R2",
+	"main": "./dist/index.js",
+	"module": "./dist/index.mjs",
+	"types": "./dist/index.d.ts",
+	"type": "commonjs",
+	"exports": {
+		".": {
+			"import": {
+				"types": "./dist/index.d.mts",
+				"default": "./dist/index.mjs"
+			},
+			"require": {
+				"types": "./dist/index.d.ts",
+				"default": "./dist/index.js"
+			}
+		}
+	},
+	"files": [
+		"dashboard",
+		"dist",
+		"LICENSE",
+		"README.md"
+	],
+	"scripts": {
+		"build": "node ../dashboard/scripts/build-cloudbox-assets.mjs && rm -rf dist dashboard LICENSE README.md && tsup src/index.ts --format cjs,esm --dts && cp -R ../dashboard/dist/ dashboard/ && cp ../../LICENSE . && cp ../../README.md .",
+		"package": "npm run build && npm pack",
+		"publint": "publint"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"keywords": [
+		"cloudflare",
+		"worker",
+		"workers",
+		"serverless",
+		"cloudflare r2",
+		"r2",
+		"storage",
+		"drive",
+		"typescript",
+		"npm",
+		"package",
+		"cjs",
+		"esm",
+		"typed"
+	],
+	"author": "Gabriel Massadas",
+	"license": "MIT",
+	"engines": {
+		"node": ">=22"
+	},
+	"devDependencies": {
+		"@cloudflare/workers-types": "^4.20251128.0",
+		"@types/node": "^24.10.1",
+		"publint": "^0.3.17",
+		"tsup": "^8.5.1",
+		"typescript": "^5.9.3",
+		"wrangler": "^4.51.0"
+	},
+	"dependencies": {
+		"chanfana": "^2.8.3",
+		"hono": "^4.10.7",
+		"zod": "^3.25.76"
+	}
+}

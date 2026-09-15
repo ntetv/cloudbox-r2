@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>cloudbox-r2 - 管理登录</title>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --surface: #fff;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --muted: #64748b;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --danger: #b91c1c;
+      --radius: 8px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 24px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", sans-serif;
+    }
+
+    .login-card {
+      width: min(380px, 100%);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface);
+      box-shadow: 0 12px 24px -4px rgb(15 23 42 / 12%);
+    }
+
+    .login-header { padding: 24px 24px 8px; text-align: center; }
+    .login-logo {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      margin-bottom: 12px;
+      border-radius: var(--radius);
+      background: var(--accent);
+      color: #fff;
+    }
+    .login-logo svg { width: 22px; height: 22px; }
+    h1 { margin: 0; font-size: 20px; }
+    .login-subtitle { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+    form { display: grid; gap: 14px; padding: 20px 24px 24px; }
+    label { display: grid; gap: 6px; color: var(--text); font-size: 13px; font-weight: 500; }
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      outline: none;
+      color: var(--text);
+      font: inherit;
+    }
+    input:focus { border-color: var(--accent); }
+    button {
+      padding: 10px 14px;
+      border: 0;
+      border-radius: var(--radius);
+      background: var(--accent);
+      color: #fff;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 500;
+    }
+    button:hover { background: var(--accent-hover); }
+    button:disabled { cursor: wait; opacity: .65; }
+    .login-error {
+      margin: 0;
+      padding: 10px 12px;
+      border-radius: var(--radius);
+      background: #fef2f2;
+      color: var(--danger);
+      font-size: 13px;
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+    }
+  </style>
+</head>
+<body>
+  <main class="login-card">
+    <header class="login-header">
+      <div class="login-logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
+        </svg>
+      </div>
+      <h1>cloudbox-r2 管理端</h1>
+      <p class="login-subtitle">请输入管理员账号和密码</p>
+    </header>
+    <form id="loginForm">
+      <p id="loginError" class="login-error" role="alert" hidden></p>
+      <label>
+        用户名
+        <input id="username" name="username" type="text" aria-label="Username" autocomplete="username" required>
+      </label>
+      <label>
+        密码
+        <input id="password" name="password" type="password" aria-label="Password" autocomplete="current-password" required>
+      </label>
+      <button id="loginButton" type="submit" aria-label="Sign in">登录</button>
+    </form>
+  </main>
+  <script type="module" src="/cloudbox-r2/login.js"></script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+name = "cloudbox-r2-example"
+compatibility_date = "2024-11-06"
+main = "src/index.ts"
+assets = { directory = "node_modules/cloudbox-r2/dashboard", binding = "ASSETS", html_handling = "none", not_found_handling = "404-page", run_worker_first = true }
+
+[[durable_objects.bindings]]
+name = "ADMIN_LOGIN_RATE_LIMITER"
+class_name = "AdminLoginRateLimiter"
+
+[[durable_objects.bindings]]
+name = "ADMIN_SESSION_STORE"
+class_name = "AdminSessionStore"
+
+[[durable_objects.bindings]]
+name = "PUBLIC_ACCESS_RATE_LIMITER"
+class_name = "PublicAccessRateLimiter"
+
+[[durable_objects.bindings]]
+name = "ADMIN_LOGIN_SOURCE_RATE_LIMITER"
+class_name = "AdminLoginSourceRateLimiter"
+
+[[durable_objects.bindings]]
+name = "TRANSFER_STORE"
+class_name = "TransferStore"
+
+[[durable_objects.bindings]]
+name = "TRANSFER_REGISTRY"
+class_name = "TransferRegistry"
+
+[[migrations]]
+tag = "v1-cloudbox-r2"
+new_sqlite_classes = ["AdminLoginRateLimiter", "AdminSessionStore", "PublicAccessRateLimiter", "AdminLoginSourceRateLimiter", "TransferStore", "TransferRegistry"]
+
+# Bind R2 Buckets to your application.
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "replace-with-your-r2-bucket"

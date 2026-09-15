@@ -1,0 +1,35 @@
+.DS_Store
+node_modules/
+.pnpm-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build output
+**/dist/
+packages/worker/dashboard/
+packages/worker/LICENSE
+packages/worker/README.md
+*.tgz
+
+# Local configuration and state
+.claude/
+.env*
+**/.env*
+.dev.vars*
+**/.dev.vars*
+**/.wrangler/
+.npmrc
+.netrc
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local reports and caches
+coverage/
+**/coverage/
+test-results/
+**/test-results/
+playwright-report/
+blob-report/

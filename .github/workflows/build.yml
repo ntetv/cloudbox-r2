@@ -1,0 +1,27 @@
+name: cloudbox-r2 build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22.x"
+      - name: Install pnpm
+        run: npm install --global pnpm@9.15.4
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check lint
+        run: pnpm lint
+      - name: Build
+        run: pnpm build
+      - name: Check package
+        run: pnpm --filter ./packages/worker package

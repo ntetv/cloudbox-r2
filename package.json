@@ -1,0 +1,16 @@
+{
+	"name": "cloudbox-r2-root",
+	"version": "0.0.0",
+	"private": true,
+	"packageManager": "pnpm@9.15.4",
+	"scripts": {
+		"lint": "pnpm exec biome check packages/dashboard/client packages/dashboard/scripts packages/worker/src",
+		"build-dashboard": "pnpm run --filter ./packages/dashboard build",
+		"build-worker": "pnpm run --filter ./packages/worker build",
+		"build": "pnpm build-dashboard && pnpm build-worker",
+		"package": "pnpm run --filter ./packages/worker package"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "1.9.4"
+	}
+}
