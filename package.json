@@ -16,6 +16,6 @@
 		"package": "pnpm run --filter ./packages/worker package"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "1.9.4"
+		"@biomejs/biome": "2.5.13"
 	}
 }

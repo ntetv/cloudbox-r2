@@ -11,6 +11,6 @@
 		"cloudbox-r2": "^1.0.0"
 	},
 	"devDependencies": {
-		"wrangler": "^4.77.0"
+		"wrangler": "^4.131.1"
 	}
 }
