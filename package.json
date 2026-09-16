@@ -4,10 +4,15 @@
 	"private": true,
 	"packageManager": "pnpm@9.15.4",
 	"scripts": {
-		"lint": "pnpm exec biome check packages/dashboard/client packages/dashboard/scripts packages/worker/src",
+		"lint": "pnpm exec biome check src packages/dashboard/client packages/dashboard/scripts packages/worker/src",
 		"build-dashboard": "pnpm run --filter ./packages/dashboard build",
 		"build-worker": "pnpm run --filter ./packages/worker build",
 		"build": "pnpm build-dashboard && pnpm build-worker",
+		"validate-deploy-config": "node scripts/validate-deploy-config.mjs",
+		"deploy:dry-run": "pnpm validate-deploy-config && pnpm build && pnpm --filter ./packages/worker exec wrangler deploy --config ../../wrangler.toml --dry-run",
+		"deploy": "pnpm validate-deploy-config && pnpm build && pnpm --filter ./packages/worker exec wrangler deploy --config ../../wrangler.toml",
+		"dev": "pnpm build-dashboard && pnpm --filter ./packages/worker exec wrangler dev --config ../../wrangler.toml",
+		"publint": "pnpm --filter ./packages/worker publint",
 		"package": "pnpm run --filter ./packages/worker package"
 	},
 	"devDependencies": {

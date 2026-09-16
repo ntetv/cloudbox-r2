@@ -59,7 +59,7 @@
 		"publint": "^0.3.17",
 		"tsup": "^8.5.1",
 		"typescript": "^5.9.3",
-		"wrangler": "^4.51.0"
+		"wrangler": "4.51.0"
 	},
 	"dependencies": {
 		"chanfana": "^2.8.3",

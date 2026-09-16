@@ -4,11 +4,11 @@
 
 它将 Worker API、静态 Dashboard、R2 对象存储和 Durable Objects 组合为一个可独立部署的文件管理服务，适合需要自行掌控存储、认证和公开访问边界的个人或团队。
 
-部署时，Worker 和 Durable Object classes 由 Wrangler 按配置创建或绑定；R2 bucket 需要先创建，再通过 `wrangler.toml` 中的 `BUCKET` binding 连接。
+部署时，Worker、Durable Object classes 和缺失的 R2 bucket 由 Wrangler 按根目录配置创建或绑定；部署前请确认当前账号和目标资源。
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/ntetv/cloudbox-r2)
 
-当前按钮仅提供部署快捷入口；仓库为私有且尚未满足按钮自动部署所需配置，请按下文手动部署步骤操作。
+根目录源码部署是推荐路径；顶部按钮保留为 Cloudflare 的快捷入口。
 
 ## 核心能力
 
@@ -43,146 +43,43 @@ Cloudflare Worker
 
 Worker 负责所有路由。未知路径不会回退到访客页面，错误的管理入口会返回 `404`。
 
-## npm 包
+## 根目录源码部署
 
-以下部署路径不依赖 `cloudbox-r2` 是否已发布到 npm registry，推荐先从源码构建并打包。只有在已确认官方包可用时，才在独立的 `template/` 项目中使用 registry 安装：
-
-```bash
-pnpm --ignore-workspace add cloudbox-r2
-```
-
-从源码安装时，在仓库内的独立模板目录中使用本地包：
-
-```bash
-# 在仓库根目录执行
-pnpm install --frozen-lockfile
-pnpm package
-
-# 进入仓库内的独立模板目录，并明确忽略父 workspace
-cd template
-pnpm --ignore-workspace add ../packages/worker/cloudbox-r2-1.0.0.tgz
-pnpm --ignore-workspace install
-```
-
-`pnpm package` 会先构建 Dashboard 和 Worker，再在 `packages/worker/` 生成 tarball。若部署前无法获得官方包或这个本地 tarball，部署不能继续。完成任一路径后，继续执行下方“推荐部署方式”的环境准备和 Wrangler 步骤；不要混用两种安装路径。
-
-公共入口：
-
-```ts
-import {
-  AdminLoginRateLimiter,
-  AdminLoginSourceRateLimiter,
-  AdminSessionStore,
-  CloudboxR2,
-  PublicAccessRateLimiter,
-  TransferRegistry,
-  TransferStore,
-} from "cloudbox-r2";
-```
-
-最小 Worker 入口：
-
-```ts
-export {
-  AdminLoginRateLimiter,
-  AdminLoginSourceRateLimiter,
-  AdminSessionStore,
-  PublicAccessRateLimiter,
-  TransferRegistry,
-  TransferStore,
-};
-
-export default CloudboxR2({
-  readonly: false,
-  publicBucket: { binding: "BUCKET" },
-});
-```
-
-`CloudboxR2Config` 只包含当前生产需要的配置：
-
-```ts
-export type CloudboxR2Config = {
-  readonly?: boolean;
-  publicBucket?: {
-    binding: string;
-    prefix?: string;
-  };
-};
-```
-
-`readonly` 默认启用。只有明确设置 `readonly: false` 时，管理员页面才允许写入、删除、复制和上传操作。上方示例和部署模板显式设置了 `readonly: false`，用于可写管理场景；如果只需要浏览和下载，请改为 `readonly: true` 或删除该字段。
-
-不设置 `publicBucket.prefix` 时，应用会公开绑定 bucket 中所有符合公开对象规则的对象（内部隐藏对象除外）；生产环境通常应限制到专用目录。如果只公开某个目录，建议限制 `publicBucket.prefix`，例如：
-
-```ts
-publicBucket: {
-  binding: "BUCKET",
-  prefix: "public",
-}
-```
+根目录 `wrangler.toml` 直接引用 `src/index.ts`（其直接引用 `packages/worker/src/index.ts`）和构建后的 `packages/dashboard/dist`，不依赖 npm 包或 tarball。默认配置保持模板语义：`readonly: false`，公开整个绑定 bucket（隐藏内部对象除外），并使用初始 `v1-cloudbox-r2` migration。
 
 ## 推荐部署方式
 
-推荐使用仓库中的 `template/` 作为独立 Worker 项目。按上一节选择 registry 或本地 tarball 安装 `cloudbox-r2`，不需要把本项目的测试、开发工具或源代码部署到 Cloudflare。
-
 ### 1. 准备环境
 
-需要：
+需要 Cloudflare Workers、R2 和 Durable Objects 权限、Node.js `22` 或更高版本，以及 pnpm `9.15.4`。仓库脚本使用 workspace 内固定的 Wrangler `4.51.0`，不使用 `npx` 随机安装。
 
-- Cloudflare 账号，并拥有 Workers、R2 和 Durable Objects 权限
-- Node.js `22` 或更高版本
-- pnpm `9.15.4`（与仓库 `packageManager` 声明一致）
-- 一个全新的 Worker 名称
-- 一个全新的 R2 bucket
+根配置默认 Worker 和 bucket 名称均为 `cloudbox-r2`，这是未确认的目标占位配置，不代表已存在或已授权的生产资源。部署前请审核账号、资源名称和计费影响；如需不同名称，先修改根目录 `wrangler.toml`。
 
-每次部署都应使用与当前环境匹配的 Worker 名称、R2 bucket 和 Durable Object 资源。
-
-### 2. 获取模板并安装依赖
-
-如果使用 registry 安装，获取本项目源码后进入部署模板目录；如果已按上一节安装本地 tarball，则直接进入该目录。以下命令显式忽略父 workspace，按独立项目执行：
+### 2. 登录并检查配置
 
 ```bash
-# 从仓库根目录执行
-cd template
-pnpm --ignore-workspace install
-pnpm --ignore-workspace exec wrangler login
+pnpm install --frozen-lockfile --offline
+pnpm exec wrangler login
+pnpm validate-deploy-config
 ```
 
-`template/` 是独立部署模板，虽然不匹配仓库的 workspace glob，但本文所有模板命令都显式使用 `--ignore-workspace`。`cloudbox-r2` 包只提供 Worker 运行时和 Dashboard 资产，不包含 `template/` 目录。
-
-### 3. 修改 Wrangler 配置
-
-编辑当前模板目录中的 `wrangler.toml`，至少替换以下值：
-
-```toml
-name = "replace-with-new-worker-name"
-
-[[r2_buckets]]
-binding = "BUCKET"
-bucket_name = "replace-with-new-r2-bucket"
-```
-
-请替换为部署环境自己的 Worker 名称和 bucket 名称，不要填写真实 token 或其他环境的配置。
-
-在 Cloudflare R2 设置中关闭该 bucket 的 `r2.dev` 和 custom domain 公开访问。否则对象可以绕过 Worker 直接访问，公开 prefix、密码锁和其他 Worker 访问控制都不会生效。
-
-### 4. 创建全新的 R2 bucket
-
-使用与 `wrangler.toml` 相同的 bucket 名称：
+### 3. 构建并预览部署
 
 ```bash
-pnpm --ignore-workspace exec wrangler r2 bucket create <new-r2-bucket-name>
+pnpm deploy:dry-run
 ```
 
-应用只使用当前 `wrangler.toml` 绑定的 R2 bucket，不会自动导入其他 bucket 的对象或 Metadata。本文档只覆盖全新实例部署，不包含数据导入操作。
+Wrangler 当前支持在部署时自动创建缺失的 R2 bucket；本配置不会绑定已知旧资源。若当前 Wrangler 或账号策略不允许自动创建，请在审核后手动创建与 `wrangler.toml` 相同名称的全新 bucket，再重试部署。应用不会导入其他 bucket 的对象或 Metadata。
 
-### 5. 首次部署 Worker
+### 4. 首次部署 Worker
+
+确认 dry-run 输出、Worker 名称、bucket 名称和绑定均正确后，手动执行：
 
 ```bash
-pnpm --ignore-workspace exec wrangler deploy
+pnpm deploy
 ```
 
-首次部署会根据当前 `wrangler.toml` 创建 Worker 和 Durable Object classes，并应用初始 `v1-cloudbox-r2` SQLite migration。保持 migration tag 和 class 列表与模板一致，不要手动修改。
+首次部署会根据当前 `wrangler.toml` 创建 Worker 和 Durable Object classes，并应用初始 `v1-cloudbox-r2` SQLite migration。保持 migration tag 和 class 列表一致，不要绑定现有生产资源。
 
 在 secrets 设置完成前，Worker 可能对请求返回：
 
@@ -197,13 +94,13 @@ Cloudbox R2 configuration unavailable
 逐条执行以下命令。Wrangler 会交互式读取值；不要把真实值直接写入 shell 命令、源码、`wrangler.toml` 或日志：
 
 ```bash
-pnpm --ignore-workspace exec wrangler secret put CLOUDBOX_R2_ADMIN_PATH
-pnpm --ignore-workspace exec wrangler secret put ADMIN_USERNAME
-pnpm --ignore-workspace exec wrangler secret put ADMIN_PASSWORD
-pnpm --ignore-workspace exec wrangler secret put ADMIN_SESSION_SECRET
-pnpm --ignore-workspace exec wrangler secret put PUBLIC_ACCESS_SESSION_SECRET
-pnpm --ignore-workspace exec wrangler secret put PUBLIC_ACCESS_PASSWORD_PEPPER
-pnpm --ignore-workspace exec wrangler secret put TRANSFER_SESSION_SECRET
+pnpm exec wrangler secret put CLOUDBOX_R2_ADMIN_PATH
+pnpm exec wrangler secret put ADMIN_USERNAME
+pnpm exec wrangler secret put ADMIN_PASSWORD
+pnpm exec wrangler secret put ADMIN_SESSION_SECRET
+pnpm exec wrangler secret put PUBLIC_ACCESS_SESSION_SECRET
+pnpm exec wrangler secret put PUBLIC_ACCESS_PASSWORD_PEPPER
+pnpm exec wrangler secret put TRANSFER_SESSION_SECRET
 ```
 
 secret 要求：
@@ -247,14 +144,13 @@ curl -i https://<worker-domain>/<admin-path>
 
 ## 本地开发
 
-进入模板目录：
+根目录本地开发：
 
 ```bash
-cd template
-pnpm --ignore-workspace run dev
+pnpm dev
 ```
 
-本地开发如需注入 secret，可使用未提交的 `template/.dev.vars`。该文件只允许存在于本机，不能提交到 Git、上传到 GitHub 或复制到部署产物。生产环境必须使用 `wrangler secret put` 管理 secret。
+本地开发如需注入 secret，可使用未提交的 `.dev.vars`。该文件只允许存在于本机，不能提交到 Git、上传到 GitHub 或复制到部署产物。生产环境必须使用 `pnpm exec wrangler secret put` 管理 secret。
 
 本地配置至少需要与生产使用相同的七个字段名。测试值必须与生产值完全不同。
 
@@ -269,11 +165,9 @@ cloudbox-r2/
 │   │   ├── public/                 # 实际使用的静态资源
 │   │   └── scripts/                # Dashboard 构建脚本
 │   └── worker/                     # Worker API 和安全边界
-├── template/                       # 可独立部署的 Worker 模板
-│   ├── visitor.html
-│   ├── admin.html
-│   ├── src/index.ts
-│   └── wrangler.toml
+├── template/                       # 独立示例模板（非根目录部署入口）
+├── wrangler.toml                    # 根目录源码部署配置
+├── scripts/                         # 部署配置校验
 ├── LICENSE
 └── README.md
 ```
@@ -295,7 +189,7 @@ cloudbox-r2/
 
 ## 部署和运维注意事项
 
-- 部署不会自动执行；请按本 README 手动执行 Wrangler 命令。
+- 部署不会自动执行；请先审核 `pnpm deploy:dry-run` 输出，再手动执行 `pnpm deploy`。
 - 应用不会自动导入其他 bucket 的对象或 Metadata。需要导入数据时，请另行准备并验证迁移命令和目标路径。
 - Durable Object migration 由当前 `wrangler.toml` 管理；首次部署前确认 migration tag 和 class 列表未被改动。
 - 管理员 secrets 必须通过 Wrangler secret 管理，不得写入源码、`wrangler.toml` 或日志。
