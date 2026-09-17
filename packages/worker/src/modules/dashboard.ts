@@ -51,14 +51,13 @@ function isAdminPage(pathname: string, adminPath: string) {
 	);
 }
 
-function isRetiredAdminPath(pathname: string) {
-	return pathname === "/admin_update" || pathname.startsWith("/admin_update/");
-}
-
 export async function dashboardRedirect(c: AppContext, next) {
 	const url = new URL(c.req.url);
 	const adminPath = c.get("config").adminPath;
-	if (isRetiredAdminPath(url.pathname)) return c.text("Not found", 404);
+	if (url.pathname === adminPath || url.pathname === `${adminPath}/`)
+		return dashboardAssetRequest(c, "/login.html");
+	if (isAdminPage(url.pathname, adminPath))
+		return dashboardAssetRequest(c, "/admin.html");
 	if (
 		url.pathname.startsWith("/api/") ||
 		url.pathname.startsWith(`${adminPath}/api/`) ||
@@ -67,11 +66,6 @@ export async function dashboardRedirect(c: AppContext, next) {
 		await next();
 		return;
 	}
-
-	if (url.pathname === adminPath || url.pathname === `${adminPath}/`)
-		return dashboardAssetRequest(c, "/login.html");
-	if (isAdminPage(url.pathname, adminPath))
-		return dashboardAssetRequest(c, "/admin.html");
 	if (url.pathname.startsWith("/public/folder/"))
 		return dashboardAssetRequest(c, "/visitor.html");
 	if (url.pathname === "/visitor.html")

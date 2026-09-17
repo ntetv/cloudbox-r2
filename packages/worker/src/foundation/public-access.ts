@@ -1,33 +1,9 @@
 import type { PublicBucketConfig } from "../types";
 
-const ADMIN_PATH_SEGMENT_PATTERN = /^[A-Za-z0-9_-]{12,64}$/;
-const RESERVED_ADMIN_PATH_SEGMENTS = new Set([
-	"admin",
-	"admin_update",
-	"api",
-	"assets",
-	"cloudbox",
-	"cloudbox-r2",
-	"favicon",
-	"favicon.ico",
-	"index",
-	"index.html",
-	"login",
-	"public",
-	"public-assets",
-	"robots",
-	"robots.txt",
-	"share",
-	"visitor",
-	"_cloudbox-r2-transfer",
-]);
+const ADMIN_PATH_SEGMENT_PATTERN = /^[A-Za-z0-9_-]{5,12}$/;
 
 export function normalizeAdminPathSegment(value?: string) {
-	if (
-		typeof value !== "string" ||
-		!ADMIN_PATH_SEGMENT_PATTERN.test(value) ||
-		RESERVED_ADMIN_PATH_SEGMENTS.has(value.toLowerCase())
-	)
+	if (typeof value !== "string" || !ADMIN_PATH_SEGMENT_PATTERN.test(value))
 		throw new Error("Invalid CLOUDBOX_R2_ADMIN_PATH");
 	return value;
 }

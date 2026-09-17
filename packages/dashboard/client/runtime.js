@@ -52,7 +52,7 @@ export function formatDate(value) {
 
 export function cloudboxR2AdminPath() {
 	const path = window.cloudboxR2Config?.adminPath;
-	return typeof path === "string" && /^\/[A-Za-z0-9_-]{12,64}$/.test(path)
+	return typeof path === "string" && /^\/[A-Za-z0-9_-]{5,12}$/.test(path)
 		? path
 		: null;
 }
@@ -74,7 +74,7 @@ export function sameOriginPath(value, expectedPath = cloudboxR2AdminPath()) {
 	if (
 		expectedPath
 			? url.pathname !== expectedPath
-			: !/^\/[A-Za-z0-9_-]{12,64}$/.test(url.pathname)
+			: !/^\/[A-Za-z0-9_-]{5,12}$/.test(url.pathname)
 	)
 		return null;
 	if (url.search || url.hash) return null;

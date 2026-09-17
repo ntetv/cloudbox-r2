@@ -107,12 +107,12 @@ secret 要求：
 
 | Secret | 要求 |
 | --- | --- |
-| `CLOUDBOX_R2_ADMIN_PATH` | 12–64 个字符；只允许字母、数字、`-`、`_`；不要包含 `/` |
+| `CLOUDBOX_R2_ADMIN_PATH` | 5–12 个字符；只允许字母、数字、`-`、`_`；不要包含 `/` |
 | `ADMIN_USERNAME` | 管理员登录用户名；1–256 个 UTF-8 字节 |
 | `ADMIN_PASSWORD` | 6–16 个 UTF-8 字节 |
 | 其他四项安全 secret | 每项至少 32 字节 |
 
-`ADMIN_USERNAME`、`ADMIN_PASSWORD` 和其他四项安全 secret 的六个值必须全部不同。管理入口名称不能与系统内置路径冲突。请使用随机、不可预测的单一 segment，不要使用 `api`、`assets`、`public`、`cloudbox-r2`、`visitor`、`robots` 或 `favicon` 等路径名称。运行时会拒绝所有系统保留 segment；如果 `CLOUDBOX_R2_ADMIN_PATH` 不符合规则，Worker 会返回 `503`，请重新生成管理入口值。
+`ADMIN_USERNAME`、`ADMIN_PASSWORD` 和其他四项安全 secret 的六个值必须全部不同。5–12 个字符的限制只适用于管理入口名称，不适用于管理员密码或其他 secret；管理入口只需使用符合上述字符规则的单一 segment。如果 `CLOUDBOX_R2_ADMIN_PATH` 不符合规则，Worker 会返回 `503`，请重新生成管理入口值。
 
 管理入口实际地址为：
 

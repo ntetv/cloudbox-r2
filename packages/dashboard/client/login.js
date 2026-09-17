@@ -12,7 +12,7 @@ async function readResponse(response) {
 
 function adminPath() {
 	const path = window.cloudboxR2Config?.adminPath;
-	return typeof path === "string" && /^\/[A-Za-z0-9_-]{12,64}$/.test(path)
+	return typeof path === "string" && /^\/[A-Za-z0-9_-]{5,12}$/.test(path)
 		? path
 		: null;
 }
