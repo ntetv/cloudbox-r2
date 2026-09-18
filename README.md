@@ -77,7 +77,7 @@ Shell 启动器会复用当前 PATH 中可解析为 Node.js `22` 或更高版本
 
 无论真实部署成功、失败、取消，还是 bucket/secrets 已部分写入后失败，向导都会在主流程 `finally` 中尝试清理本次 standalone bootstrap 生成的 `cloudbox-r2-<SHA 前 12 位>` 源码副本、`.wrangler/setup` 内的配置/pnpm/tar 临时目录和日志，以及当前执行的固定远程 MJS 缓存。完整用户仓库模式不会删除仓库源码；只清理传入 root 下的 `.wrangler/setup` 命名空间，不碰其他 `.wrangler` 状态。`${XDG_DATA_HOME:-$HOME/.local/share}/cloudbox-r2/node-v...` 官方 Node.js 用户缓存会保留，sibling 模式脚本和根源码会保留。清理只使用 Node 文件 API、精确的本次调用标记和路径校验，不执行资源删除命令；不会删除或修改任何 GitHub 历史 commit，也不会删除 R2、Worker、Durable Objects 或 secrets。SIGKILL 发生在 `finally` 之前时仍可能留下这些本机生成物，需要人工检查。
 
-部署成功后，向导会合并 Wrangler 的 stdout 和 stderr，只接受与所选 Worker 匹配的 `https://<worker>.<account>.workers.dev` 地址；若 Wrangler 没有输出地址，向导会使用当前 API Token 请求账号 Workers subdomain API（`GET /accounts/<ACCOUNT_ID>/workers/subdomain`），严格校验 `result.subdomain` 后组合出 `https://<worker>.<subdomain>.workers.dev`。地址找到后会检查首页；API 不可用、响应无效、关闭 `workers_dev` 或使用自定义域名时，部署仍视为成功，并提示到 Cloudflare Dashboard 查看域名配置。
+部署成功后，向导会合并 Wrangler 的 stdout 和 stderr，只接受与所选 Worker 匹配的 `https://<worker>.<account>.workers.dev` 地址；若 Wrangler 没有输出地址，向导会使用当前 API Token 请求账号 Workers subdomain API（`GET /accounts/<ACCOUNT_ID>/workers/subdomain`），严格校验 `result.subdomain` 后组合出 `https://<worker>.<subdomain>.workers.dev`。地址找到后会检查首页；首页响应未包含预期页面标记时，部署地址仍会输出，同时显示首页验证警告，便于手动访问排查。API 不可用、响应无效、关闭 `workers_dev` 或使用自定义域名时，部署仍视为成功，并提示到 Cloudflare Dashboard 查看域名配置。
 
 需要先在 Cloudflare Dashboard 创建一个**账号范围** API Token。向导只接受此 Token 和单独输入的 32 位十六进制 Account ID；Account ID 不是第二个凭据。Token 只在当前进程内存中保存，仅注入 Wrangler 子进程和固定 Cloudflare API 请求的 `Authorization` header，不会进入 npm/pnpm、构建命令、参数、配置或日志。向导不会调用 `wrangler login`、OAuth、浏览器登录、Global API Key 或邮箱密码，也不依赖本机已有 OAuth 状态。
 

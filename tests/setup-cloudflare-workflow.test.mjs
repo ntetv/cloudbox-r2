@@ -16,7 +16,11 @@ const secrets = makeSecrets({
 	password: "password",
 });
 
-async function runDeploymentScenario(deployResult, apiResponder) {
+async function runDeploymentScenario(
+	deployResult,
+	apiResponder,
+	homeResponder,
+) {
 	const stages = [];
 	let fetchCalls = 0;
 	const accountId = "0123456789abcdef0123456789abcdef";
@@ -51,7 +55,10 @@ async function runDeploymentScenario(deployResult, apiResponder) {
 					apiResponder?.(url, options) ?? new Response("", { status: 404 })
 				);
 			fetchCalls += 1;
-			return new Response("<title>Cloudbox</title>", { status: 200 });
+			return (
+				homeResponder?.(url, options) ??
+				new Response("<title>Cloudbox</title>", { status: 200 })
+			);
 		},
 		onStage: (stage) => stages.push(stage),
 	});
@@ -164,6 +171,25 @@ test("workflow resolves workers.dev URL from account subdomain API", async () =>
 	assert.equal(request.options.method, "GET");
 	assert.equal(request.options.headers.Authorization, "Bearer test-token");
 	assert.equal(request.options.headers["Content-Type"], "application/json");
+});
+
+test("workflow returns resolved URL when homepage verification fails", async () => {
+	const { result, fetchCalls } = await runDeploymentScenario(
+		{
+			code: 0,
+			stdout: "部署完成，但输出没有地址",
+			stderr: "",
+		},
+		async () =>
+			new Response(
+				JSON.stringify({ success: true, result: { subdomain: "account" } }),
+				{ status: 200, headers: { "content-type": "application/json" } },
+			),
+		async () => new Response("<html>unexpected page</html>", { status: 200 }),
+	);
+	assert.equal(result.url, "https://scenario-worker.account.workers.dev");
+	assert.equal(result.homeCheckError, "首页验证未找到预期页面标记。");
+	assert.equal(fetchCalls, 2);
 });
 
 test("workflow accepts code-zero deployment without a workers.dev URL", async () => {

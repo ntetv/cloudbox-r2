@@ -1444,8 +1444,13 @@ export async function runWorkflow({
 			fetchImpl,
 		);
 	if (!url) return { config, url: null };
-	await checkHome(`${url}/`, fetchImpl);
-	return { config, url };
+	let homeCheckError = null;
+	try {
+		await checkHome(`${url}/`, fetchImpl);
+	} catch (error) {
+		homeCheckError = error instanceof Error ? error.message : "首页验证失败。";
+	}
+	return { config, url, homeCheckError };
 }
 
 function runToolWith(run, tool, args, options) {
@@ -2704,6 +2709,8 @@ async function main() {
 			stopIfCancelled();
 			if (result.url) {
 				console.log(`部署成功：${result.url}`);
+				if (result.homeCheckError)
+					console.error(`首页验证警告：${result.homeCheckError}`);
 				console.log(
 					"请手动访问该地址并追加你设置的管理入口（不会在输出中显示完整管理 URL）。",
 				);
