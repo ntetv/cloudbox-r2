@@ -16,15 +16,16 @@ const secrets = makeSecrets({
 	password: "password",
 });
 
-async function runDeploymentScenario(deployResult) {
+async function runDeploymentScenario(deployResult, apiResponder) {
 	const stages = [];
 	let fetchCalls = 0;
+	const accountId = "0123456789abcdef0123456789abcdef";
 	const result = await runWorkflow({
 		apiToken: "test-token",
 		pnpm,
 		workerName: "scenario-worker",
 		bucketName: "scenario-bucket",
-		accountId: "0123456789abcdef0123456789abcdef",
+		accountId,
 		secrets,
 		run: async () => ({ code: 0, stdout: "", stderr: "" }),
 		wranglerRunner: async (args, options) => {
@@ -41,7 +42,14 @@ async function runDeploymentScenario(deployResult) {
 			throw new Error(`unexpected ${args.join(" ")}`);
 		},
 		confirm: async () => true,
-		fetchImpl: async () => {
+		fetchImpl: async (url, options) => {
+			if (
+				url ===
+				`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/subdomain`
+			)
+				return (
+					apiResponder?.(url, options) ?? new Response("", { status: 404 })
+				);
 			fetchCalls += 1;
 			return new Response("<title>Cloudbox</title>", { status: 200 });
 		},
@@ -126,6 +134,36 @@ test("workflow extracts a workers.dev URL from stderr", async () => {
 	});
 	assert.equal(result.url, "https://scenario-worker.account.workers.dev");
 	assert.equal(fetchCalls, 1);
+});
+
+test("workflow resolves workers.dev URL from account subdomain API", async () => {
+	let request;
+	const { result, fetchCalls } = await runDeploymentScenario(
+		{
+			code: 0,
+			stdout: "部署完成，但输出没有地址",
+			stderr: "",
+		},
+		async (url, options) => {
+			request = { url, options };
+			return new Response(
+				JSON.stringify({
+					success: true,
+					result: { subdomain: "account" },
+				}),
+				{ status: 200, headers: { "content-type": "application/json" } },
+			);
+		},
+	);
+	assert.equal(result.url, "https://scenario-worker.account.workers.dev");
+	assert.equal(fetchCalls, 1);
+	assert.equal(
+		request.url,
+		"https://api.cloudflare.com/client/v4/accounts/0123456789abcdef0123456789abcdef/workers/subdomain",
+	);
+	assert.equal(request.options.method, "GET");
+	assert.equal(request.options.headers.Authorization, "Bearer test-token");
+	assert.equal(request.options.headers["Content-Type"], "application/json");
 });
 
 test("workflow accepts code-zero deployment without a workers.dev URL", async () => {

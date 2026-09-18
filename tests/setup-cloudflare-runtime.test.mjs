@@ -201,6 +201,7 @@ test("API token is isolated to Wrangler env and parent auth conflicts cannot ove
 				assert.equal(options.env.CLOUDFLARE_API_TOKEN, undefined);
 				return { code: 0, stdout: "", stderr: "" };
 			},
+			fetchImpl: async () => new Response("", { status: 404 }),
 			wranglerRunner: async (args, options) => {
 				seen.push({ args, env: options.env });
 				if (args[0] === "deploy" && args.includes("--dry-run"))

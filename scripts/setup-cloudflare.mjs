@@ -1194,6 +1194,50 @@ export function extractDeploymentUrl(output, workerName) {
 	return deploymentUrl(output, workerName, { optional: true });
 }
 
+export async function workersDevUrlFromApi(
+	accountId,
+	apiToken,
+	workerName,
+	fetchImpl = fetch,
+	timeoutMs = 10_000,
+) {
+	if (
+		!/^[a-f0-9]{32}$/i.test(accountId) ||
+		!validateApiToken(apiToken) ||
+		!validateWorkerName(workerName)
+	)
+		return null;
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), timeoutMs);
+	try {
+		const response = await fetchImpl(
+			`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/subdomain`,
+			{
+				method: "GET",
+				headers: {
+					Authorization: `Bearer ${apiToken}`,
+					"Content-Type": "application/json",
+				},
+				redirect: "error",
+				signal: controller.signal,
+			},
+		);
+		if (response.status !== 200) return null;
+		const payload = await response.json();
+		const subdomain =
+			payload?.success === true ? payload.result?.subdomain : null;
+		if (typeof subdomain !== "string" || !NAME.test(subdomain)) return null;
+		return workerDeploymentOrigin(
+			`https://${workerName}.${subdomain}.workers.dev`,
+			workerName,
+		);
+	} catch {
+		return null;
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
 export async function checkHome(url, fetchImpl = fetch, timeoutMs = 10_000) {
 	for (let attempt = 0; attempt < 2; attempt += 1) {
 		const controller = new AbortController();
@@ -1390,10 +1434,15 @@ export async function runWorkflow({
 		throw error;
 	}
 	onStage(`Worker ${workerName}`);
-	const url = extractDeploymentUrl(
-		`${deployed.stdout ?? ""}\n${deployed.stderr ?? ""}`,
-		workerName,
-	);
+	const deploymentOutput = `${deployed.stdout ?? ""}\n${deployed.stderr ?? ""}`;
+	let url = extractDeploymentUrl(deploymentOutput, workerName);
+	if (!url)
+		url = await workersDevUrlFromApi(
+			accountId,
+			apiToken,
+			workerName,
+			fetchImpl,
+		);
 	if (!url) return { config, url: null };
 	await checkHome(`${url}/`, fetchImpl);
 	return { config, url };
