@@ -652,6 +652,8 @@ export async function runCommand(command, args, options = {}) {
 		let killTimer = null;
 		let termination = null;
 		let closeInfo = null;
+		let exitInfo = null;
+		let forceKilled = false;
 		let settled = false;
 		const clearTimers = () => {
 			if (timeoutTimer) clearTimeout(timeoutTimer);
@@ -662,6 +664,7 @@ export async function runCommand(command, args, options = {}) {
 		const cleanupChild = () => {
 			abortSignal?.removeEventListener("abort", onAbort);
 			child.removeListener("error", onError);
+			child.removeListener("exit", onExit);
 			child.removeListener("close", onClose);
 			child.stdin?.destroy();
 			child.stdout?.destroy();
@@ -693,13 +696,15 @@ export async function runCommand(command, args, options = {}) {
 		};
 		const forceKill = () => {
 			if (settled) return;
+			forceKilled = true;
 			try {
 				killChild(child, "SIGKILL", killProcessGroup);
 			} catch (error) {
 				rejectOnce(error);
 				return;
 			}
-			resolveOnce(closeInfo?.code ?? null, "SIGKILL");
+			if (closeInfo) resolveOnce(closeInfo.code, "SIGKILL");
+			else if (exitInfo) resolveOnce(exitInfo.code, "SIGKILL");
 		};
 		const beginTermination = (reason) => {
 			if (settled || termination) return;
@@ -718,9 +723,14 @@ export async function runCommand(command, args, options = {}) {
 		const onError = (error) => {
 			if (!termination) rejectOnce(error);
 		};
+		const onExit = (code, signal) => {
+			exitInfo = { code, signal };
+			if (forceKilled) resolveOnce(code, "SIGKILL");
+		};
 		const onClose = (code, signal) => {
 			closeInfo = { code, signal };
 			if (!termination) resolveOnce(code, signal);
+			else if (forceKilled) resolveOnce(code, "SIGKILL");
 		};
 		if (abortSignal)
 			abortSignal.addEventListener("abort", onAbort, { once: true });
@@ -735,6 +745,7 @@ export async function runCommand(command, args, options = {}) {
 			child.stdin.end(input);
 		}
 		child.once("error", onError);
+		child.once("exit", onExit);
 		child.once("close", onClose);
 	});
 }
@@ -1487,7 +1498,6 @@ export async function downloadArchive({
 	if (signal?.aborted) onAbort();
 	const timer =
 		timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
-	timer?.unref?.();
 	try {
 		const response = await fetchImpl(archiveUrl, {
 			redirect: "error",
