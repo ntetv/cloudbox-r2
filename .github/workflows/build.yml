@@ -19,9 +19,25 @@ jobs:
         run: npm install --global pnpm@9.15.4
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Check setup launcher
+        run: pnpm test:setup
       - name: Check lint
-        run: pnpm lint
+        run: pnpm run lint
       - name: Build
         run: pnpm build
       - name: Check package
         run: pnpm --filter ./packages/worker package
+
+  launcher:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22.x"
+      - name: Run launcher fake-PATH tests
+        run: node --test tests/setup-cloudflare-launcher.test.mjs

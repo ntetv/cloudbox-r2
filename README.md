@@ -73,7 +73,11 @@ Shell 启动器会复用当前 PATH 中可解析为 Node.js `22` 或更高版本
 
 单文件模式默认固定 `ntetv/cloudbox-r2` commit `b168336b35c4a6d93c97c18dcfab17cc8c46ac00`，只从 HTTPS `codeload.github.com` 下载源码，并在当前 cwd 创建 `cloudbox-r2-b168336b35c4`。目标已存在时会拒绝且不覆盖。源码下载完成后才会收集 Token；解包使用 npm registry 的固定 `tar@7.5.14`（Node.js `>=22`，固定 tarball SRI 与隐藏 npm lock、完整传递依赖版本/resolved/integrity 校验、通过 npm `--ignore-scripts` 安装），并在受限 Node worker 中执行，带固定内存、时间、输出、下载和解压大小上限，不调用系统 `tar`。网络需要访问 `codeload.github.com` 和 `registry.npmjs.org`；该流程不使用 Git、GitHub API 或远端源码中不存在的 setup 文件。
 
-需要官方 Node.js 22+（含 npm）；向导会在目标源码的隔离目录准备固定版本 pnpm 9.15.4，并使用锁定的 Wrangler 4.51.0。单文件模式只支持 Linux/macOS，因为固定 commit 的构建脚本包含 Unix `rm`/`cp`；Windows 会在构建前明确拒绝，本地兼容 build 版本尚未发布。它只支持交互式终端，会先构建和 dry-run 检查，再在明确确认后创建新的 Worker、专用 R2 bucket、七个 Worker secrets 并部署。每次只能使用全新的 Worker 和 bucket 名称；向导不会覆盖、迁移、恢复或卸载现有资源。源码准备期间收到 SIGINT/SIGTERM 会清理向导拥有的临时目录和侧锁；SIGKILL 无法清理，但侧锁会记录向导标记、PID 和时间，下一次仅在确认 PID 已不存在且锁确属本向导时回收，其他锁不会删除。
+需要官方 Node.js 22+（含 npm）；向导会在目标源码的隔离目录准备固定版本 pnpm 9.15.4，并使用锁定的 Wrangler 4.51.0。单文件模式只支持 Linux/macOS，因为固定 commit 的构建脚本包含 Unix `rm`/`cp`；Windows 会在构建前明确拒绝，本地兼容 build 版本尚未发布。它只支持交互式终端，会先构建和 dry-run 检查，再在明确确认后创建新的 Worker、专用 R2 bucket、七个 Worker secrets 并部署。每次只能使用全新的 Worker 和 bucket 名称；向导不会覆盖、迁移、恢复或卸载现有资源。源码准备期间收到 SIGINT/SIGTERM 会清理向导拥有的临时目录和侧锁；SIGKILL 无法被捕获，不能保证本机清理，但侧锁会记录向导标记、PID 和时间，下一次仅在确认 PID 已不存在且锁确属本向导时回收，其他锁不会删除。
+
+无论真实部署成功、失败、取消，还是 bucket/secrets 已部分写入后失败，向导都会在主流程 `finally` 中尝试清理本次 standalone bootstrap 生成的 `cloudbox-r2-<SHA 前 12 位>` 源码副本、`.wrangler/setup` 内的配置/pnpm/tar 临时目录和日志，以及当前执行的固定远程 MJS 缓存。完整用户仓库模式不会删除仓库源码；只清理传入 root 下的 `.wrangler/setup` 命名空间，不碰其他 `.wrangler` 状态。`${XDG_DATA_HOME:-$HOME/.local/share}/cloudbox-r2/node-v...` 官方 Node.js 用户缓存会保留，sibling 模式脚本和根源码会保留。清理只使用 Node 文件 API、精确的本次调用标记和路径校验，不执行资源删除命令；不会删除或修改任何 GitHub 历史 commit，也不会删除 R2、Worker、Durable Objects 或 secrets。SIGKILL 发生在 `finally` 之前时仍可能留下这些本机生成物，需要人工检查。
+
+部署成功后，向导会合并 Wrangler 的 stdout 和 stderr，只接受与所选 Worker 匹配的 `https://<worker>.<account>.workers.dev` 地址；找到地址时返回并检查首页。若关闭 `workers_dev`、使用自定义域名或输出没有合法地址，部署仍视为成功，不会猜测地址或调用首页检查，并提示到 Cloudflare Dashboard 查看域名配置。
 
 需要先在 Cloudflare Dashboard 创建一个**账号范围** API Token。向导只接受此 Token 和单独输入的 32 位十六进制 Account ID；Account ID 不是第二个凭据。Token 只在当前进程内存中保存，并仅注入 Wrangler 子进程，不会进入 npm/pnpm、构建命令、参数、配置或日志。向导不会调用 `wrangler login`、OAuth、浏览器登录、Global API Key 或邮箱密码，也不依赖本机已有 OAuth 状态。
 

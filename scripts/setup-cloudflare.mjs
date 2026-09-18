@@ -106,9 +106,17 @@ export const TAR_DEPENDENCY_LOCK = Object.freeze({
 });
 export const DEFAULT_SOURCE_WORKER_NAME = "cloudbox-r2";
 export const DEFAULT_SOURCE_BUCKET_NAME = "cloudbox-r2";
+export const REMOTE_MJS_REF = "499f2b41895a6402747bb3a6ff7e924fdc7c96b3";
 export const MAX_ARCHIVE_BYTES = 64 * 1024 * 1024;
 export const MAX_EXTRACTED_BYTES = 256 * 1024 * 1024;
 export const MAX_ARCHIVE_ENTRIES = 10_000;
+
+const SETUP_MARKER_KIND = "cloudbox-r2-setup-namespace-v1";
+const SETUP_MARKER_FILE = ".cloudbox-r2-setup-managed";
+const MANAGED_TARGET_MARKER_KIND = "cloudbox-r2-bootstrap-target-v1";
+const MANAGED_TARGET_MARKER_FILE = ".cloudbox-r2-bootstrap-managed.json";
+const REMOTE_MJS_CACHE_FILE = `setup-cloudflare-${REMOTE_MJS_REF}.mjs`;
+const SETUP_MARKER_CONTENT = `${SETUP_MARKER_KIND}\n`;
 
 function resolveRoot(root = ROOT) {
 	if (typeof root !== "string" || !root) fail("缺少有效的源码根目录。");
@@ -117,6 +125,53 @@ function resolveRoot(root = ROOT) {
 function setupRoot(root = ROOT) {
 	return path.join(resolveRoot(root), ".wrangler", "setup");
 }
+
+async function lstatOrNull(target) {
+	try {
+		return await lstat(target);
+	} catch (error) {
+		if (error?.code === "ENOENT") return null;
+		throw error;
+	}
+}
+
+async function ensureSetupDirectory(directory, label) {
+	let info = await lstatOrNull(directory);
+	if (info?.isSymbolicLink() || (info && !info.isDirectory()))
+		fail(`${label} 必须是普通目录。`);
+	if (!info) await mkdir(directory, { recursive: true, mode: 0o700 });
+	info = await lstatOrNull(directory);
+	if (!info || info.isSymbolicLink() || !info.isDirectory())
+		fail(`${label} 必须是普通目录。`);
+	return directory;
+}
+
+export async function ensureSetupNamespace(root = ROOT) {
+	const resolvedRoot = resolveRoot(root);
+	const rootInfo = await lstat(resolvedRoot);
+	if (rootInfo.isSymbolicLink() || !rootInfo.isDirectory())
+		fail("源码根目录必须是普通目录。");
+	const wranglerDirectory = await ensureSetupDirectory(
+		path.join(resolvedRoot, ".wrangler"),
+		".wrangler",
+	);
+	const directory = await ensureSetupDirectory(
+		path.join(wranglerDirectory, "setup"),
+		".wrangler/setup",
+	);
+	const marker = path.join(directory, SETUP_MARKER_FILE);
+	const markerInfo = await lstatOrNull(marker);
+	if (markerInfo) {
+		if (markerInfo.isSymbolicLink() || !markerInfo.isFile())
+			fail(".wrangler/setup 所有权标记无效。");
+		if ((await readFile(marker, "utf8")) !== SETUP_MARKER_CONTENT)
+			fail(".wrangler/setup 所有权标记不匹配。");
+		return directory;
+	}
+	await writeFile(marker, SETUP_MARKER_CONTENT, { flag: "wx", mode: 0o600 });
+	return directory;
+}
+
 function wranglerSafeEnv(root = ROOT) {
 	return {
 		WRANGLER_LOG: "info",
@@ -132,6 +187,199 @@ export function createSetupContext(root = DEFAULT_ROOT ?? ROOT) {
 		setupRoot: setupRoot(resolvedRoot),
 		wranglerSafeEnv: wranglerSafeEnv(resolvedRoot),
 	});
+}
+
+export async function cleanupSetupNamespace(root, { rmImpl = rm } = {}) {
+	if (typeof rmImpl !== "function") fail("setup 清理器无效。");
+	const resolvedRoot = resolveRoot(root);
+	const rootInfo = await lstatOrNull(resolvedRoot);
+	if (!rootInfo) return false;
+	if (rootInfo.isSymbolicLink() || !rootInfo.isDirectory())
+		fail("源码根目录必须是普通目录。");
+	const wranglerDirectory = path.join(resolvedRoot, ".wrangler");
+	const wranglerInfo = await lstatOrNull(wranglerDirectory);
+	if (!wranglerInfo) return false;
+	if (wranglerInfo.isSymbolicLink() || !wranglerInfo.isDirectory())
+		fail(".wrangler 必须是普通目录。");
+	const directory = path.join(wranglerDirectory, "setup");
+	const directoryInfo = await lstatOrNull(directory);
+	if (!directoryInfo) return false;
+	if (directoryInfo.isSymbolicLink() || !directoryInfo.isDirectory())
+		fail(".wrangler/setup 必须是普通目录。");
+	const expectedDirectory = path.join(
+		await realpath(resolvedRoot),
+		".wrangler",
+		"setup",
+	);
+	if ((await realpath(directory)) !== expectedDirectory)
+		fail(".wrangler/setup 路径校验失败。");
+	const marker = path.join(directory, SETUP_MARKER_FILE);
+	const markerInfo = await lstatOrNull(marker);
+	if (!markerInfo) return false;
+	if (markerInfo.isSymbolicLink() || !markerInfo.isFile())
+		fail(".wrangler/setup 所有权标记无效。");
+	if ((await readFile(marker, "utf8")) !== SETUP_MARKER_CONTENT)
+		fail(".wrangler/setup 所有权标记不匹配。");
+	await rmImpl(directory, { recursive: true, force: true });
+	return true;
+}
+
+export async function cleanupMjsCache({
+	scriptPath,
+	env = process.env,
+	rmImpl = rm,
+} = {}) {
+	if (typeof rmImpl !== "function") fail("MJS 缓存清理器无效。");
+	if (typeof scriptPath !== "string" || !scriptPath) return false;
+	const cacheHome =
+		typeof env?.XDG_CACHE_HOME === "string" && env.XDG_CACHE_HOME
+			? env.XDG_CACHE_HOME
+			: typeof env?.HOME === "string" && env.HOME
+				? path.join(env.HOME, ".cache")
+				: null;
+	if (!cacheHome) return false;
+	if (!path.isAbsolute(cacheHome)) fail("MJS 缓存根目录必须是绝对路径。");
+	const cacheDirectory = path.resolve(cacheHome, "cloudbox-r2");
+	const resolvedScript = path.resolve(scriptPath);
+	if (path.basename(resolvedScript) !== REMOTE_MJS_CACHE_FILE) return false;
+	const cacheInfo = await lstatOrNull(cacheDirectory);
+	if (!cacheInfo) return false;
+	if (cacheInfo.isSymbolicLink() || !cacheInfo.isDirectory())
+		fail("MJS 缓存目录必须是普通目录。");
+	const scriptInfo = await lstatOrNull(resolvedScript);
+	if (!scriptInfo) return false;
+	if (scriptInfo.isSymbolicLink() || !scriptInfo.isFile())
+		fail("固定 MJS 缓存必须是普通文件。");
+	const realCacheDirectory = await realpath(cacheDirectory);
+	if (
+		(await realpath(resolvedScript)) !==
+		path.join(realCacheDirectory, REMOTE_MJS_CACHE_FILE)
+	)
+		fail("固定 MJS 缓存路径校验失败。");
+	await rmImpl(resolvedScript, { force: true });
+	return true;
+}
+
+function managedTargetInput(value) {
+	if (!value || typeof value !== "object") fail("缺少受管理的源码目标。");
+	const ref = validateSourceRef(value.ref);
+	if (!ref) fail("受管理的源码目标 ref 无效。");
+	if (typeof value.cwd !== "string" || typeof value.target !== "string")
+		fail("受管理的源码目标路径无效。");
+	if (typeof value.marker !== "string" || !/^[0-9a-f]{64}$/.test(value.marker))
+		fail("受管理的源码目标标记无效。");
+	const cwd = path.resolve(value.cwd);
+	const target = path.resolve(value.target);
+	const expectedTarget = path.join(
+		cwd,
+		`${DEFAULT_SOURCE_WORKER_NAME}-${ref.slice(0, 12)}`,
+	);
+	if (target !== expectedTarget || path.dirname(target) !== cwd)
+		fail("受管理的源码目标越出本次 cwd。");
+	return { cwd, target, ref, expectedTarget, marker: value.marker };
+}
+
+export async function cleanupManagedTarget(
+	managedTarget,
+	{ rmImpl = rm } = {},
+) {
+	if (!managedTarget) return false;
+	if (typeof rmImpl !== "function") fail("源码目标清理器无效。");
+	const { cwd, target, ref, expectedTarget, marker } =
+		managedTargetInput(managedTarget);
+	const cwdInfo = await lstatOrNull(cwd);
+	if (!cwdInfo) return false;
+	if (cwdInfo.isSymbolicLink() || !cwdInfo.isDirectory())
+		fail("源码目标 cwd 必须是普通目录。");
+	const realCwd = await realpath(cwd);
+	const targetInfo = await lstatOrNull(target);
+	if (!targetInfo) return false;
+	if (targetInfo.isSymbolicLink() || !targetInfo.isDirectory())
+		fail("受管理的源码目标不是普通目录。");
+	if (
+		(await realpath(target)) !==
+		path.join(realCwd, path.basename(expectedTarget))
+	)
+		fail("受管理的源码目标路径校验失败。");
+	const markerPath = path.join(target, MANAGED_TARGET_MARKER_FILE);
+	const markerInfo = await lstatOrNull(markerPath);
+	if (!markerInfo || markerInfo.isSymbolicLink() || !markerInfo.isFile())
+		fail("受管理的源码目标标记缺失或无效。");
+	let metadata;
+	try {
+		metadata = JSON.parse(await readFile(markerPath, "utf8"));
+	} catch {
+		fail("受管理的源码目标标记无法读取。");
+	}
+	const fields = Object.keys(metadata ?? {}).sort();
+	if (
+		fields.join(",") !== "kind,ref,target,token" ||
+		metadata.kind !== MANAGED_TARGET_MARKER_KIND ||
+		metadata.ref !== ref ||
+		metadata.target !== expectedTarget ||
+		metadata.token !== marker
+	)
+		fail("受管理的源码目标标记不匹配。");
+	await rmImpl(target, { recursive: true, force: true });
+	return true;
+}
+
+async function removeOwnedBootstrapDirectory(owned, cwd, ref) {
+	if (!owned) return;
+	const normalizedRef = validateSourceRef(ref);
+	if (!normalizedRef) fail("bootstrap 临时目录 ref 无效。");
+	const resolvedCwd = path.resolve(cwd);
+	const resolvedOwned = path.resolve(owned);
+	const prefix = `.cloudbox-r2-bootstrap-${normalizedRef.slice(0, 12)}-`;
+	if (
+		path.dirname(resolvedOwned) !== resolvedCwd ||
+		!path.basename(resolvedOwned).startsWith(prefix)
+	)
+		fail("bootstrap 临时目录越出本次 cwd。");
+	const cwdInfo = await lstatOrNull(resolvedCwd);
+	if (!cwdInfo) return;
+	if (cwdInfo.isSymbolicLink() || !cwdInfo.isDirectory())
+		fail("bootstrap 临时目录 cwd 必须是普通目录。");
+	const info = await lstatOrNull(resolvedOwned);
+	if (!info) return;
+	if (info.isSymbolicLink() || !info.isDirectory())
+		fail("bootstrap 临时目录必须是普通目录。");
+	if (
+		(await realpath(resolvedOwned)) !==
+		path.join(await realpath(resolvedCwd), path.basename(resolvedOwned))
+	)
+		fail("bootstrap 临时目录路径校验失败。");
+	await rm(resolvedOwned, { recursive: true, force: true });
+}
+
+export async function cleanupLocalState({
+	managedTarget = null,
+	root = null,
+	scriptPath = null,
+	env = process.env,
+	rmImpl = rm,
+} = {}) {
+	const warnings = [];
+	const attempt = async (label, action) => {
+		try {
+			await action();
+		} catch {
+			warnings.push(label);
+		}
+	};
+	if (managedTarget)
+		await attempt("源码副本", () =>
+			cleanupManagedTarget(managedTarget, { rmImpl }),
+		);
+	if (root)
+		await attempt("setup 临时目录", () =>
+			cleanupSetupNamespace(root, { rmImpl }),
+		);
+	if (scriptPath)
+		await attempt("MJS 缓存", () =>
+			cleanupMjsCache({ scriptPath, env, rmImpl }),
+		);
+	return warnings;
 }
 
 const AUTH_ENV_NAMES = new Set([
@@ -557,7 +805,8 @@ export async function ensurePnpm({
 		fail(`找不到官方 Node.js 附带的 npm，无法准备固定 pnpm@${PNPM_VERSION}。`);
 	if (!(await confirmDownload()))
 		fail(`未同意下载固定 pnpm@${PNPM_VERSION}，已停止。`);
-	const installRoot = path.join(setupRoot(resolvedRoot), "pnpm");
+	const setupDirectory = await ensureSetupNamespace(resolvedRoot);
+	const installRoot = path.join(setupDirectory, "pnpm");
 	await mkdir(installRoot, { recursive: true });
 	const npmTool = typeof npm === "string" ? { command: npm, args: [] } : npm;
 	const result = await run(
@@ -629,9 +878,9 @@ export async function wrangler(args, options = {}) {
 		fail(
 			`缺少锁定的 Wrangler ${WRANGLER_VERSION}，请先完成 pnpm install --frozen-lockfile。`,
 		);
-	await mkdir(setupRoot(resolvedRoot), { recursive: true });
+	const setupDirectory = await ensureSetupNamespace(resolvedRoot);
 	const logDirectory = path.join(
-		setupRoot(resolvedRoot),
+		setupDirectory,
 		"logs",
 		`run-${Date.now()}-${randomBytes(4).toString("hex")}`,
 	);
@@ -804,7 +1053,8 @@ export async function deriveConfig(
 		`bucket_name = ${tomlString(bucketName)}`,
 		"bucket_name",
 	);
-	const directory = path.join(setupRoot(resolvedRoot), configRunId);
+	const setupDirectory = await ensureSetupNamespace(resolvedRoot);
+	const directory = path.join(setupDirectory, configRunId);
 	await mkdir(directory, { recursive: true });
 	const config = path.join(directory, "wrangler.toml");
 	await writeFile(config, lines.join("\n"), { mode: 0o600 });
@@ -854,45 +1104,85 @@ export async function secretBulk(config, secrets, runner = wrangler) {
 		);
 }
 
-export function deploymentUrl(output, workerName) {
-	const urls = [...output.matchAll(/https:\/\/[^\s]+/gi)].map(([value]) =>
-		value.replace(/[),.;]+$/, ""),
-	);
-	const candidates = urls.filter((value) => {
-		try {
-			const authority = value.slice("https://".length).split(/[/?#]/, 1)[0];
-			if (authority.includes("@") || authority.includes(":")) return false;
-			const parsed = new URL(value);
-			const labels = parsed.hostname.split(".");
-			return (
-				parsed.protocol === "https:" &&
-				!parsed.username &&
-				!parsed.password &&
-				!parsed.port &&
-				parsed.pathname === "/" &&
-				!parsed.search &&
-				!parsed.hash &&
-				labels.length === 4 &&
-				labels[0] === workerName &&
-				labels[1].length > 0 &&
-				labels[2] === "workers" &&
-				labels[3] === "dev"
-			);
-		} catch {
-			return false;
-		}
-	});
-	const unique = [...new Set(candidates)];
-	if (unique.length !== 1)
-		fail(
-			unique.length > 1
-				? "部署输出包含多个冲突的 workers.dev 地址，已停止。"
-				: urls.length
-					? "部署输出中的 workers.dev 地址不是本次 Worker，已停止。"
-					: "未能从受验证的部署输出提取 workers.dev 地址。",
-		);
-	return new URL(unique[0]).origin;
+const ANSI_ESCAPE = new RegExp(
+	`${String.fromCharCode(27)}\\[[0-?]*[ -/]*[@-~]`,
+	"g",
+);
+
+function stripAnsi(value) {
+	return value.replace(ANSI_ESCAPE, "");
 }
+
+function workerDeploymentOrigin(value, workerName) {
+	try {
+		const authority = value.slice("https://".length).split(/[/?#]/, 1)[0];
+		if (authority.includes("@") || authority.includes(":")) return null;
+		const parsed = new URL(value);
+		const labels = parsed.hostname.split(".");
+		if (
+			parsed.protocol !== "https:" ||
+			parsed.username ||
+			parsed.password ||
+			parsed.port ||
+			parsed.pathname !== "/" ||
+			parsed.search ||
+			parsed.hash ||
+			labels.length !== 4 ||
+			labels[0] !== workerName ||
+			!NAME.test(labels[1]) ||
+			labels[2] !== "workers" ||
+			labels[3] !== "dev"
+		)
+			return null;
+		return parsed.origin;
+	} catch {
+		return null;
+	}
+}
+
+function deploymentUrlResult(output, workerName) {
+	const cleanOutput = typeof output === "string" ? stripAnsi(output) : "";
+	const urls = [
+		...new Set(
+			[...cleanOutput.matchAll(/https:\/\/[^\s]+/gi)].map(([value]) =>
+				value.replace(/[),.;]+$/, ""),
+			),
+		),
+	];
+	const candidates = [
+		...new Set(
+			urls
+				.map((value) => workerDeploymentOrigin(value, workerName))
+				.filter(Boolean),
+		),
+	];
+	const url =
+		candidates.length === 1 &&
+		urls.every(
+			(value) => workerDeploymentOrigin(value, workerName) === candidates[0],
+		)
+			? candidates[0]
+			: null;
+	return { urls, candidates, url };
+}
+
+export function deploymentUrl(output, workerName, options = {}) {
+	const { urls, candidates, url } = deploymentUrlResult(output, workerName);
+	const optional = options === true || options?.optional === true;
+	if (url || optional) return url;
+	fail(
+		candidates.length > 1 || urls.length > 1
+			? "部署输出包含多个冲突的 workers.dev 地址，已停止。"
+			: urls.length
+				? "部署输出中的 workers.dev 地址不是本次 Worker，已停止。"
+				: "未能从受验证的部署输出提取 workers.dev 地址。",
+	);
+}
+
+export function extractDeploymentUrl(output, workerName) {
+	return deploymentUrl(output, workerName, { optional: true });
+}
+
 export async function checkHome(url, fetchImpl = fetch, timeoutMs = 10_000) {
 	for (let attempt = 0; attempt < 2; attempt += 1) {
 		const controller = new AbortController();
@@ -1089,7 +1379,11 @@ export async function runWorkflow({
 		throw error;
 	}
 	onStage(`Worker ${workerName}`);
-	const url = deploymentUrl(deployed.stdout, workerName);
+	const url = extractDeploymentUrl(
+		`${deployed.stdout ?? ""}\n${deployed.stderr ?? ""}`,
+		workerName,
+	);
+	if (!url) return { config, url: null };
 	await checkHome(`${url}/`, fetchImpl);
 	return { config, url };
 }
@@ -1925,7 +2219,8 @@ export async function installTar({
 	const resolvedRoot = resolveRoot(root);
 	npm ??= await npmPath();
 	if (!npm) fail("找不到官方 Node.js 附带的 npm，无法准备固定 tar。");
-	const installRoot = path.join(setupRoot(resolvedRoot), "tar");
+	const setupDirectory = await ensureSetupNamespace(resolvedRoot);
+	const installRoot = path.join(setupDirectory, "tar");
 	await rm(installRoot, { recursive: true, force: true });
 	await mkdir(installRoot, { recursive: true, mode: 0o700 });
 	const npmTool = typeof npm === "string" ? { command: npm, args: [] } : npm;
@@ -2069,6 +2364,9 @@ export async function bootstrapSource({
 	const normalizedRef = validateSourceRef(ref);
 	if (!normalizedRef) fail("源码 ref 必须是完整 40 位十六进制 commit SHA。");
 	const resolvedCwd = path.resolve(cwd);
+	const cwdInfo = await lstat(resolvedCwd);
+	if (cwdInfo.isSymbolicLink() || !cwdInfo.isDirectory())
+		fail("bootstrap cwd 必须是普通目录。");
 	const target = path.join(
 		resolvedCwd,
 		`${DEFAULT_SOURCE_WORKER_NAME}-${normalizedRef.slice(0, 12)}`,
@@ -2078,13 +2376,14 @@ export async function bootstrapSource({
 	let reservation = null;
 	let owned = null;
 	let targetCommitted = false;
+	let managedTarget = null;
 	let result = null;
 	let primaryError = null;
 	const cleanup = async () => {
 		const errors = [];
 		if (owned) {
 			try {
-				await rm(owned, { recursive: true, force: true });
+				await removeOwnedBootstrapDirectory(owned, resolvedCwd, normalizedRef);
 			} catch (error) {
 				errors.push(error);
 			}
@@ -2147,6 +2446,23 @@ export async function bootstrapSource({
 		const publish = path.join(owned, "publish");
 		await mkdir(publish, { mode: 0o700 });
 		await copyStagingIntoPublish(staging, publish);
+		const marker = randomBytes(32).toString("hex");
+		await writeFile(
+			path.join(publish, MANAGED_TARGET_MARKER_FILE),
+			JSON.stringify({
+				kind: MANAGED_TARGET_MARKER_KIND,
+				ref: normalizedRef,
+				target,
+				token: marker,
+			}),
+			{ flag: "wx", mode: 0o600 },
+		);
+		managedTarget = Object.freeze({
+			cwd: resolvedCwd,
+			target,
+			ref: normalizedRef,
+			marker,
+		});
 		await assertTargetAbsent(target);
 		try {
 			await rename(publish, target);
@@ -2156,28 +2472,35 @@ export async function bootstrapSource({
 			throw error;
 		}
 		targetCommitted = true;
+		if (interrupted) fail("操作已取消。");
 		result = {
 			ref: normalizedRef,
 			root: target,
 			target,
+			managedTarget,
 			topLevel: archive.topLevel,
 		};
 	} catch (error) {
 		primaryError = error;
 	} finally {
 		const cleanupErrors = await cleanup();
+		if (primaryError && targetCommitted && managedTarget) {
+			try {
+				await cleanupManagedTarget(managedTarget);
+			} catch (error) {
+				cleanupErrors.push(error);
+			}
+		}
 		process.removeListener("SIGINT", onSignal);
 		process.removeListener("SIGTERM", onSignal);
 		if (cleanupErrors.length) {
-			const detail = `bootstrap 临时目录清理失败：${cleanupErrors
-				.map((error) => error.message)
-				.join("；")}`;
+			const detail = "bootstrap 本机生成物清理失败";
 			if (primaryError instanceof Error) {
 				primaryError.message += `；${detail}`;
 			} else if (primaryError) {
 				primaryError = new AggregateError([primaryError], detail);
 			} else {
-				primaryError = new Error(detail, { cause: cleanupErrors[0] });
+				primaryError = new Error(detail);
 			}
 		}
 	}
@@ -2202,127 +2525,151 @@ async function main() {
 		assertSupportedBuildPlatform(process.platform, ref ?? DEFAULT_SOURCE_REF);
 	if (!stdin.isTTY || !stdout.isTTY)
 		fail("首次部署向导需要交互式终端（TTY）；请不要通过管道运行。");
-	const source = shouldBootstrap
-		? await bootstrapSource({ ref: ref ?? DEFAULT_SOURCE_REF })
-		: { root: DEFAULT_ROOT };
-	const root = source.root;
-	if (shouldBootstrap)
-		console.log(`源码已准备到 ${source.target}（固定 commit ${source.ref}）。`);
-	const rl = createInterface({ input: stdin, output: stdout, terminal: true });
-	let cancelled = false;
-	rl.on("SIGINT", () => {
-		cancelled = true;
-		rl.close();
-	});
-	const stopIfCancelled = () => {
-		if (cancelled) fail("操作已取消。");
-	};
-	let pnpm;
-	const completed = [];
+	let root = null;
+	let managedTarget = null;
+	let rl = null;
+	let onTerminate = null;
 	try {
-		pnpm = await ensurePnpm({
-			root,
-			confirmDownload: async () =>
-				confirm(
-					await rl.question(
-						`未找到 pnpm ${PNPM_VERSION}，需要下载到项目隔离目录？[y/N] `,
-					),
-				),
-		});
-		const installed = await runTool(pnpm, ["install", "--frozen-lockfile"], {
-			capture: true,
-			timeoutMs: WORKFLOW_TIMEOUT_MS,
-			root,
-		});
-		stopIfCancelled();
-		assertCommandSuccess(installed, "依赖安装");
-		const apiToken = await askSecret(
-			rl,
-			"Cloudflare API Token（输入不会回显）：",
-			validateApiToken,
-			"API Token 格式无效。",
-		);
-		const accountId = await ask(
-			rl,
-			"账号 ID：",
-			(v) => (/^[a-f0-9]{32}$/i.test(v.trim()) ? v.trim() : null),
-			"账号 ID 格式无效。",
-		);
-		const workerName = await ask(
-			rl,
-			"新 Worker 名称：",
-			(v) => validateWorkerName(v.trim()),
-			"Worker 名称格式无效。",
-		);
-		const bucketName = await ask(
-			rl,
-			"新 R2 bucket 名称：",
-			(v) => validateBucketName(v.trim()),
-			"bucket 名称格式无效。",
-		);
-		const adminPath = await askSecret(
-			rl,
-			"管理入口（5–12 字符）：",
-			(v) => validateAdminPath(v.trim()),
-			"管理入口格式无效。",
-		);
-		const username = await askSecret(
-			rl,
-			"管理员用户名：",
-			(v) => validateUsername(v),
-			"用户名不能为空且最多 256 UTF-8 字节。",
-		);
-		const password = await askSecret(
-			rl,
-			"管理员密码：",
-			(v) => validatePassword(v, username),
-			"密码需 6–16 UTF-8 字节且不能等于用户名。",
-		);
-		const repeat = await askSecret(
-			rl,
-			"再次输入管理员密码：",
-			(v) => (v === password ? v : null),
-			"两次密码不一致。",
-		);
-		void repeat;
-		const secrets = makeSecrets({ adminPath, username, password });
-		const result = await runWorkflow({
-			root,
-			pnpm,
-			workerName,
-			bucketName,
-			accountId,
-			apiToken,
-			secrets,
-			confirm: async ({
-				accountId: selectedAccount,
-				workerName: selectedWorker,
-				bucketName: selectedBucket,
-			}) => {
-				console.log(
-					`\n目标账号：${selectedAccount}\nWorker：${selectedWorker}\nbucket：${selectedBucket}`,
-				);
-				console.log(
-					"公开范围内未加锁对象可被访客访问；资源可能产生费用；失败后不会自动删除。",
-				);
-				return confirm(await rl.question("确认创建并部署？[y/N] "));
-			},
-			onStage: (stage) => completed.push(stage),
-		});
-		if (result.url) {
-			console.log(`部署成功：${result.url}`);
+		const source = shouldBootstrap
+			? await bootstrapSource({ ref: ref ?? DEFAULT_SOURCE_REF })
+			: { root: DEFAULT_ROOT, managedTarget: null };
+		root = source.root;
+		managedTarget = shouldBootstrap ? source.managedTarget : null;
+		if (shouldBootstrap)
 			console.log(
-				"请手动访问该地址并追加你设置的管理入口（不会在输出中显示完整管理 URL）。",
+				`源码已准备到 ${source.target}（固定 commit ${source.ref}）。`,
 			);
+		rl = createInterface({ input: stdin, output: stdout, terminal: true });
+		let cancelled = false;
+		onTerminate = () => {
+			cancelled = true;
+			rl.close();
+		};
+		process.prependListener("SIGTERM", onTerminate);
+		rl.on("SIGINT", onTerminate);
+		const stopIfCancelled = () => {
+			if (cancelled) fail("操作已取消。");
+		};
+		let pnpm;
+		const completed = [];
+		try {
+			pnpm = await ensurePnpm({
+				root,
+				confirmDownload: async () =>
+					confirm(
+						await rl.question(
+							`未找到 pnpm ${PNPM_VERSION}，需要下载到项目隔离目录？[y/N] `,
+						),
+					),
+			});
+			const installed = await runTool(pnpm, ["install", "--frozen-lockfile"], {
+				capture: true,
+				timeoutMs: WORKFLOW_TIMEOUT_MS,
+				root,
+			});
+			stopIfCancelled();
+			assertCommandSuccess(installed, "依赖安装");
+			const apiToken = await askSecret(
+				rl,
+				"Cloudflare API Token（输入不会回显）：",
+				validateApiToken,
+				"API Token 格式无效。",
+			);
+			const accountId = await ask(
+				rl,
+				"账号 ID：",
+				(v) => (/^[a-f0-9]{32}$/i.test(v.trim()) ? v.trim() : null),
+				"账号 ID 格式无效。",
+			);
+			const workerName = await ask(
+				rl,
+				"新 Worker 名称：",
+				(v) => validateWorkerName(v.trim()),
+				"Worker 名称格式无效。",
+			);
+			const bucketName = await ask(
+				rl,
+				"新 R2 bucket 名称：",
+				(v) => validateBucketName(v.trim()),
+				"bucket 名称格式无效。",
+			);
+			const adminPath = await askSecret(
+				rl,
+				"管理入口（5–12 字符）：",
+				(v) => validateAdminPath(v.trim()),
+				"管理入口格式无效。",
+			);
+			const username = await askSecret(
+				rl,
+				"管理员用户名：",
+				(v) => validateUsername(v),
+				"用户名不能为空且最多 256 UTF-8 字节。",
+			);
+			const password = await askSecret(
+				rl,
+				"管理员密码：",
+				(v) => validatePassword(v, username),
+				"密码需 6–16 UTF-8 字节且不能等于用户名。",
+			);
+			const repeat = await askSecret(
+				rl,
+				"再次输入管理员密码：",
+				(v) => (v === password ? v : null),
+				"两次密码不一致。",
+			);
+			void repeat;
+			const secrets = makeSecrets({ adminPath, username, password });
+			const result = await runWorkflow({
+				root,
+				pnpm,
+				workerName,
+				bucketName,
+				accountId,
+				apiToken,
+				secrets,
+				confirm: async ({
+					accountId: selectedAccount,
+					workerName: selectedWorker,
+					bucketName: selectedBucket,
+				}) => {
+					console.log(
+						`\n目标账号：${selectedAccount}\nWorker：${selectedWorker}\nbucket：${selectedBucket}`,
+					);
+					console.log(
+						"公开范围内未加锁对象可被访客访问；资源可能产生费用；失败后不会自动删除。",
+					);
+					return confirm(await rl.question("确认创建并部署？[y/N] "));
+				},
+				onStage: (stage) => completed.push(stage),
+			});
+			stopIfCancelled();
+			if (result.url) {
+				console.log(`部署成功：${result.url}`);
+				console.log(
+					"请手动访问该地址并追加你设置的管理入口（不会在输出中显示完整管理 URL）。",
+				);
+			} else {
+				console.log(
+					"Worker已部署，但未检测到workers.dev地址，请到Cloudflare Dashboard查看域名配置",
+				);
+			}
+		} catch (error) {
+			if (completed.length)
+				console.error(
+					`已完成阶段：${completed.join("、")}。云端资源不会自动删除，请人工检查；本机生成物将尝试清理。`,
+				);
+			throw error;
 		}
-	} catch (error) {
-		if (completed.length)
-			console.error(
-				`已完成阶段：${completed.join("、")}。资源不会自动删除，请人工检查。`,
-			);
-		throw error;
 	} finally {
-		rl.close();
+		if (onTerminate) process.removeListener("SIGTERM", onTerminate);
+		rl?.close();
+		const warnings = await cleanupLocalState({
+			managedTarget,
+			root,
+			scriptPath: modulePath,
+		});
+		if (warnings.length)
+			console.error(`cleanup warning：${warnings.join("、")}。`);
 	}
 }
 
