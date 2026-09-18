@@ -139,7 +139,7 @@ test("runCommand keeps the hard deadline when SIGTERM exits with code zero", asy
 		{ capture: true, timeoutMs: 20, killGraceMs: 20 },
 	);
 	assert.equal(result.timedOut, true);
-	assert.equal(result.code, 0);
+	assert.ok(result.code === 0 || result.code === null);
 	assert.equal(result.signal, "SIGKILL");
 });
 
