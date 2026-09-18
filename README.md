@@ -47,19 +47,54 @@ Worker 负责所有路由。未知路径不会回退到访客页面，错误的�
 
 根目录 `wrangler.toml` 直接引用 `src/index.ts`（其直接引用 `packages/worker/src/index.ts`）和构建后的 `packages/dashboard/dist`，不依赖 npm 包或 tarball。默认配置保持模板语义：`readonly: false`，公开整个绑定 bucket（隐藏内部对象除外），并使用初始 `v1-cloudbox-r2` migration。
 
+## 仅 Cloudflare 账号的本地首次部署
+
+已有完整源码时，在仓库根目录运行：
+
+```bash
+sh scripts/setup-cloudflare.sh
+```
+
+没有完整仓库时，也可以只保存 Shell 启动器并在想要放置源码的父目录运行：
+
+```bash
+sh /root/setup-cloudflare.sh
+```
+
+Shell 启动器会优先验证并调用同目录、且位于完整仓库标记下的 `scripts/setup-cloudflare.mjs`；不会因为临时目录中出现同名文件就执行。若只需要直接运行现有 MJS，也可以把仓库中的 `scripts/setup-cloudflare.mjs` 单独保存为 `/root/setup-cloudflare.mjs`，然后在想要放置源码的父目录运行：
+
+```bash
+node /root/setup-cloudflare.mjs
+# 可选：指定另一个完整 40 位 commit SHA
+node /root/setup-cloudflare.mjs --ref b168336b35c4a6d93c97c18dcfab17cc8c46ac00
+```
+
+Shell 启动器会复用当前 PATH 中可解析为 Node.js `22` 或更高版本的 `node`。如果 Node 缺失、版本过低或输出异常，它只在用户目录 `${XDG_DATA_HOME:-$HOME/.local/share}/cloudbox-r2/node-v22.23.2-<platform>` 准备固定的官方 Node.js `22.23.2`，校验固定 SHA-256 后再原子发布；不会修改 shell profile、系统目录或全局 PATH。支持 macOS x64/arm64，以及使用 glibc 的 Linux x64/arm64；musl、Windows 和其他架构会明确拒绝。下载只使用固定的 `https://nodejs.org/download/release/v22.23.2/` HTTPS 地址。单独复制并执行 Shell 启动器也可用；没有受信任 sibling 时，它只从固定的 `https://raw.githubusercontent.com/ntetv/cloudbox-r2/499f2b41895a6402747bb3a6ff7e924fdc7c96b3/scripts/setup-cloudflare.mjs` 下载远程 MJS，强制 HTTPS、重定向和超时限制，并校验固定 SHA-256 `e3484d48edc9eeea28a1cc30b10d670fc1968abde6c69abeaf91776279360e7c` 后，以私有 staging 原子缓存到 `${XDG_CACHE_HOME:-$HOME/.cache}/cloudbox-r2/setup-cloudflare-499f2b41895a6402747bb3a6ff7e924fdc7c96b3.mjs`（mode `700`）。每次启动都会重新校验已有缓存；损坏或不匹配时拒绝执行且不会覆盖，下载失败只清理本次 staging。Shell 不读取或记录 Cloudflare Token，下载完成后仍以原参数、cwd 和 TTY `exec` Node。
+
+单文件模式默认固定 `ntetv/cloudbox-r2` commit `b168336b35c4a6d93c97c18dcfab17cc8c46ac00`，只从 HTTPS `codeload.github.com` 下载源码，并在当前 cwd 创建 `cloudbox-r2-b168336b35c4`。目标已存在时会拒绝且不覆盖。源码下载完成后才会收集 Token；解包使用 npm registry 的固定 `tar@7.5.14`（Node.js `>=22`，固定 tarball SRI 与隐藏 npm lock、完整传递依赖版本/resolved/integrity 校验、通过 npm `--ignore-scripts` 安装），并在受限 Node worker 中执行，带固定内存、时间、输出、下载和解压大小上限，不调用系统 `tar`。网络需要访问 `codeload.github.com` 和 `registry.npmjs.org`；该流程不使用 Git、GitHub API 或远端源码中不存在的 setup 文件。
+
+需要官方 Node.js 22+（含 npm）；向导会在目标源码的隔离目录准备固定版本 pnpm 9.15.4，并使用锁定的 Wrangler 4.51.0。单文件模式只支持 Linux/macOS，因为固定 commit 的构建脚本包含 Unix `rm`/`cp`；Windows 会在构建前明确拒绝，本地兼容 build 版本尚未发布。它只支持交互式终端，会先构建和 dry-run 检查，再在明确确认后创建新的 Worker、专用 R2 bucket、七个 Worker secrets 并部署。每次只能使用全新的 Worker 和 bucket 名称；向导不会覆盖、迁移、恢复或卸载现有资源。源码准备期间收到 SIGINT/SIGTERM 会清理向导拥有的临时目录和侧锁；SIGKILL 无法清理，但侧锁会记录向导标记、PID 和时间，下一次仅在确认 PID 已不存在且锁确属本向导时回收，其他锁不会删除。
+
+需要先在 Cloudflare Dashboard 创建一个**账号范围** API Token。向导只接受此 Token 和单独输入的 32 位十六进制 Account ID；Account ID 不是第二个凭据。Token 只在当前进程内存中保存，并仅注入 Wrangler 子进程，不会进入 npm/pnpm、构建命令、参数、配置或日志。向导不会调用 `wrangler login`、OAuth、浏览器登录、Global API Key 或邮箱密码，也不依赖本机已有 OAuth 状态。
+
+请在 Cloudflare 官方 [API Token 权限参考](https://developers.cloudflare.com/fundamentals/api/reference/permissions/) 和 [Workers 授权说明](https://developers.cloudflare.com/workers/authorization/workers/) 中按当前界面选择最小的账号级权限：Worker 脚本部署/编辑、R2 bucket 创建与管理、Durable Objects namespace/migration 管理，以及 Workers Assets 所属的 Worker 脚本部署权限；仅当使用路由或自定义域名时再增加对应的 Routes 权限。优先使用官方 “Edit Cloudflare Workers” 模板后收窄到目标账号，并按权限参考核对当前名称，不要凭旧名称创建权限。Token 必须能读取目标账号的 Worker 部署列表和 R2 bucket 信息；向导会用这些只读请求预检权限，不要求 `whoami`、用户或邮箱权限。
+
+部署前请确认：未加锁的公开对象可被访客访问，Cloudflare 资源可能产生费用。云端写入不是原子事务，失败时不会自动删除已创建资源；请按错误提示人工检查。真实云端写入和真实 Token 未在本地验证。
+
 ## 推荐部署方式
 
 ### 1. 准备环境
 
 需要 Cloudflare Workers、R2 和 Durable Objects 权限、Node.js `22` 或更高版本，以及 pnpm `9.15.4`。仓库脚本使用 workspace 内固定的 Wrangler `4.51.0`，不使用 `npx` 随机安装。
 
-根配置默认 Worker 和 bucket 名称均为 `cloudbox-r2`，这是未确认的目标占位配置，不代表已存在或已授权的生产资源。部署前请审核账号、资源名称和计费影响；如需不同名称，先修改根目录 `wrangler.toml`。
+根配置默认 Worker 和 bucket 名称均为 `cloudbox-r2`，这是未确认的目标占位配置，不代表已存在或已授权的生产资源。部署前请审核账号、资源名称和计费影响；如需不同名称，先修改根目录 `wrangler.toml`。向导会读取根配置中的唯一顶层 Worker `name` 和唯一 `bucket_name` 字段生成临时配置，不要求它们仍叫 `cloudbox-r2`；`validate-deploy-config` 默认只校验必要结构，也可通过 `--worker-name` 与 `--bucket-name` 校验动态配置。单文件下载会额外校验快照身份仍是固定源项目默认名称，避免把未预期的源码变体当成下载结果；向导始终先执行结构校验，只有快照自带 validator 支持动态参数时才调用 pnpm validator，旧快照的品牌硬编码不会阻断自定义名称。
 
-### 2. 登录并检查配置
+### 2. 使用 Token 检查配置
 
 ```bash
 pnpm install --frozen-lockfile --offline
-pnpm exec wrangler login
+# 先以安全方式在当前 shell 注入 CLOUDFLARE_API_TOKEN（不要写入命令历史）
+pnpm --filter ./packages/worker exec wrangler --version
 pnpm validate-deploy-config
 ```
 
@@ -94,13 +129,13 @@ Cloudbox R2 configuration unavailable
 逐条执行以下命令。Wrangler 会交互式读取值；不要把真实值直接写入 shell 命令、源码、`wrangler.toml` 或日志：
 
 ```bash
-pnpm exec wrangler secret put CLOUDBOX_R2_ADMIN_PATH
-pnpm exec wrangler secret put ADMIN_USERNAME
-pnpm exec wrangler secret put ADMIN_PASSWORD
-pnpm exec wrangler secret put ADMIN_SESSION_SECRET
-pnpm exec wrangler secret put PUBLIC_ACCESS_SESSION_SECRET
-pnpm exec wrangler secret put PUBLIC_ACCESS_PASSWORD_PEPPER
-pnpm exec wrangler secret put TRANSFER_SESSION_SECRET
+pnpm --filter ./packages/worker exec wrangler secret put CLOUDBOX_R2_ADMIN_PATH
+pnpm --filter ./packages/worker exec wrangler secret put ADMIN_USERNAME
+pnpm --filter ./packages/worker exec wrangler secret put ADMIN_PASSWORD
+pnpm --filter ./packages/worker exec wrangler secret put ADMIN_SESSION_SECRET
+pnpm --filter ./packages/worker exec wrangler secret put PUBLIC_ACCESS_SESSION_SECRET
+pnpm --filter ./packages/worker exec wrangler secret put PUBLIC_ACCESS_PASSWORD_PEPPER
+pnpm --filter ./packages/worker exec wrangler secret put TRANSFER_SESSION_SECRET
 ```
 
 secret 要求：
@@ -150,7 +185,7 @@ curl -i https://<worker-domain>/<admin-path>
 pnpm dev
 ```
 
-本地开发如需注入 secret，可使用未提交的 `.dev.vars`。该文件只允许存在于本机，不能提交到 Git、上传到 GitHub 或复制到部署产物。生产环境必须使用 `pnpm exec wrangler secret put` 管理 secret。
+本地开发如需注入 secret，可使用未提交的 `.dev.vars`。该文件只允许存在于本机，不能提交到 Git、上传到 GitHub 或复制到部署产物。生产环境必须使用 `pnpm --filter ./packages/worker exec wrangler secret put` 管理 secret。
 
 本地配置至少需要与生产使用相同的七个字段名。测试值必须与生产值完全不同。
 
@@ -167,7 +202,7 @@ cloudbox-r2/
 │   └── worker/                     # Worker API 和安全边界
 ├── template/                       # 独立示例模板（非根目录部署入口）
 ├── wrangler.toml                    # 根目录源码部署配置
-├── scripts/                         # 部署配置校验
+├── scripts/                         # Shell 启动器与部署配置校验
 ├── LICENSE
 └── README.md
 ```

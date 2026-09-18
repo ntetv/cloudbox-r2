@@ -5,7 +5,7 @@ umask 077
 NODE_VERSION=22.23.2
 NODE_RELEASE_URL="https://nodejs.org/download/release/v${NODE_VERSION}"
 
-# Filled only after a released, fixed MJS payload has a real commit and hash.
+# Fixed release of the standalone MJS payload.
 REMOTE_MJS_REF=499f2b41895a6402747bb3a6ff7e924fdc7c96b3
 REMOTE_MJS_SHA256=e3484d48edc9eeea28a1cc30b10d670fc1968abde6c69abeaf91776279360e7c
 
@@ -16,6 +16,11 @@ script_directory=
 mjs_path=
 node_platform=
 node_home=
+remote_cache_parent=
+remote_cache_path=
+remote_publish_lock=
+checksum_command=
+checksum_kind=
 
 fail() {
 	printf '%s\n' "setup-cloudflare: $*" >&2
@@ -29,9 +34,17 @@ cleanup_staging() {
 	fi
 }
 
+cleanup_remote_publish_lock() {
+	if [ -n "$remote_publish_lock" ]; then
+		rm -rf "$remote_publish_lock" || :
+		remote_publish_lock=
+	fi
+}
+
 cleanup() {
 	status=$?
 	trap - EXIT HUP INT TERM
+	cleanup_remote_publish_lock
 	cleanup_staging
 	exit "$status"
 }
@@ -72,15 +85,165 @@ trusted_sibling_mjs() {
 	return 0
 }
 
+resolve_checksum_tool() {
+	if command -v sha256sum >/dev/null 2>&1; then
+		checksum_command=$(command -v sha256sum)
+		checksum_kind=sha256sum
+	elif command -v shasum >/dev/null 2>&1; then
+		checksum_command=$(command -v shasum)
+		checksum_kind=shasum
+	else
+		fail "缺少 sha256sum 或 shasum；已在下载前停止。"
+	fi
+}
+
+checksum_matches() {
+	checksum_target=$1
+	checksum_expected=$2
+	if [ "$checksum_kind" = sha256sum ]; then
+		if ! checksum_output=$("$checksum_command" "$checksum_target"); then
+			return 1
+		fi
+	else
+		if ! checksum_output=$("$checksum_command" -a 256 "$checksum_target"); then
+			return 1
+		fi
+	fi
+	actual_sha256=${checksum_output%%[[:space:]]*}
+	[ "$actual_sha256" = "$checksum_expected" ]
+}
+
+resolve_remote_cache() {
+	if [ -z "${HOME:-}" ]; then
+		fail "未设置 HOME，无法选择固定 MJS 用户缓存目录。"
+	fi
+	if [ -n "${XDG_CACHE_HOME:-}" ]; then
+		cache_home=$XDG_CACHE_HOME
+	else
+		cache_home=$HOME/.cache
+	fi
+	case "$cache_home" in
+		/*) ;;
+		*) fail "XDG_CACHE_HOME 必须是绝对路径。" ;;
+	esac
+	remote_cache_parent=$cache_home/cloudbox-r2
+	remote_cache_path=$remote_cache_parent/setup-cloudflare-${REMOTE_MJS_REF}.mjs
+}
+
+use_cached_remote_mjs() {
+	if [ -L "$remote_cache_path" ]; then
+		fail "固定 MJS 缓存路径是符号链接，拒绝执行：$remote_cache_path"
+	fi
+	if [ -e "$remote_cache_path" ]; then
+		if [ ! -f "$remote_cache_path" ]; then
+			fail "固定 MJS 缓存不是普通文件，拒绝执行：$remote_cache_path"
+		fi
+		if ! checksum_matches "$remote_cache_path" "$REMOTE_MJS_SHA256"; then
+			fail "固定 MJS 缓存 SHA-256 不匹配，拒绝执行：$remote_cache_path"
+		fi
+		if ! chmod 700 "$remote_cache_path"; then
+			fail "无法将固定 MJS 缓存设为私有：$remote_cache_path"
+		fi
+		mjs_path=$remote_cache_path
+		return 0
+	fi
+	return 1
+}
+
+release_remote_publish_lock() {
+	if [ -n "$remote_publish_lock" ]; then
+		if ! rm -rf "$remote_publish_lock"; then
+			fail "无法释放固定 MJS 缓存发布锁。"
+		fi
+		remote_publish_lock=
+	fi
+}
+
+download_remote_mjs() {
+	require_tool curl
+	require_tool mktemp
+	require_tool mkdir
+	require_tool mv
+	require_tool chmod
+	resolve_checksum_tool
+
+	if ! mkdir -p -m 700 "$remote_cache_parent"; then
+		fail "无法创建固定 MJS 用户缓存目录：$remote_cache_parent"
+	fi
+	if ! chmod 700 "$remote_cache_parent"; then
+		fail "无法将固定 MJS 用户缓存目录设为私有：$remote_cache_parent"
+	fi
+	if ! staging=$(mktemp -d "$remote_cache_parent/.setup-cloudflare-${REMOTE_MJS_REF}.XXXXXX"); then
+		fail "无法创建私有固定 MJS staging 目录。"
+	fi
+	if ! chmod 700 "$staging"; then
+		fail "无法将固定 MJS staging 目录设为私有。"
+	fi
+
+	remote_mjs_tmp=$staging/setup-cloudflare.mjs
+	remote_mjs_url=https://raw.githubusercontent.com/ntetv/cloudbox-r2/$REMOTE_MJS_REF/scripts/setup-cloudflare.mjs
+	if ! curl --fail --silent --show-error --location \
+		--proto '=https' --proto-redir '=https' --max-redirs 3 \
+		--connect-timeout 10 --max-time 120 \
+		--output "$remote_mjs_tmp" "$remote_mjs_url"
+	then
+		fail "固定 MJS payload 下载失败。"
+	fi
+	[ -f "$remote_mjs_tmp" ] || fail "固定 MJS payload 下载没有生成文件。"
+	if ! checksum_matches "$remote_mjs_tmp" "$REMOTE_MJS_SHA256"; then
+		fail "固定 MJS payload SHA-256 不匹配，拒绝执行。"
+	fi
+	if ! chmod 700 "$remote_mjs_tmp"; then
+		fail "无法将固定 MJS payload 设为私有。"
+	fi
+
+	remote_lock_path=$remote_cache_parent/.setup-cloudflare-${REMOTE_MJS_REF}.publish
+	if ! mkdir "$remote_lock_path" 2>/dev/null; then
+		if [ -e "$remote_cache_path" ] || [ -L "$remote_cache_path" ]; then
+			if use_cached_remote_mjs; then
+				cleanup_staging
+				return
+			fi
+		fi
+		fail "固定 MJS 缓存正在发布，拒绝覆盖：$remote_cache_path"
+	fi
+	remote_publish_lock=$remote_lock_path
+	if [ -e "$remote_cache_path" ] || [ -L "$remote_cache_path" ]; then
+		if use_cached_remote_mjs; then
+			release_remote_publish_lock
+			cleanup_staging
+			return
+		fi
+		fail "固定 MJS 缓存路径在发布前出现，拒绝覆盖：$remote_cache_path"
+	fi
+	if ! mv "$remote_mjs_tmp" "$remote_cache_path"; then
+		fail "无法原子发布固定 MJS 缓存：$remote_cache_path"
+	fi
+	if ! checksum_matches "$remote_cache_path" "$REMOTE_MJS_SHA256"; then
+		fail "固定 MJS 缓存发布后 SHA-256 不匹配，拒绝执行：$remote_cache_path"
+	fi
+	if ! chmod 700 "$remote_cache_path"; then
+		fail "无法将固定 MJS 缓存设为私有：$remote_cache_path"
+	fi
+	release_remote_publish_lock
+	mjs_path=$remote_cache_path
+	cleanup_staging
+}
+
 resolve_mjs() {
 	if trusted_sibling_mjs; then
 		mjs_path=$script_directory/setup-cloudflare.mjs
 		return
 	fi
-	if [ -n "$REMOTE_MJS_REF" ] || [ -n "$REMOTE_MJS_SHA256" ]; then
-		fail "独立模式的固定 MJS payload 尚未完成实现；请先发布并固定 commit 与 SHA-256。"
+	if [ -z "$REMOTE_MJS_REF" ] || [ -z "$REMOTE_MJS_SHA256" ]; then
+		fail "固定 MJS payload 的 ref 或 SHA-256 未配置。"
 	fi
-	fail "未找到受信任的 sibling setup-cloudflare.mjs；独立模式的固定 MJS payload 尚未发布，请从完整仓库运行此启动器。"
+	resolve_remote_cache
+	resolve_checksum_tool
+	if use_cached_remote_mjs; then
+		return
+	fi
+	download_remote_mjs
 }
 
 node_major_at_least_22() {
