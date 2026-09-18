@@ -6,8 +6,8 @@ NODE_VERSION=22.23.2
 NODE_RELEASE_URL="https://nodejs.org/download/release/v${NODE_VERSION}"
 
 # Filled only after a released, fixed MJS payload has a real commit and hash.
-REMOTE_MJS_REF=
-REMOTE_MJS_SHA256=
+REMOTE_MJS_REF=499f2b41895a6402747bb3a6ff7e924fdc7c96b3
+REMOTE_MJS_SHA256=ad3c05ddd41cc23058dffca6b66a7cb773c1dbc838dd90a71e2a3271b5397634
 
 staging=
 node_command=
