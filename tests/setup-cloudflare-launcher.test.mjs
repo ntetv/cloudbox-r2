@@ -17,7 +17,7 @@ import path from "node:path";
 import test from "node:test";
 
 const ROOT = path.resolve(new URL("..", import.meta.url).pathname);
-const LAUNCHER = path.join(ROOT, "scripts/setup-cloudflare.sh");
+const LAUNCHER = path.join(ROOT, "scripts/install_cloudbox.sh");
 const NODE_VERSION = "22.23.2";
 const TOKEN_CANARY = "launcher-token-canary";
 const REF = "0123456789abcdef0123456789abcdef01234567";
@@ -52,8 +52,8 @@ async function makeFixture({ markers = true } = {}) {
 	const root = await mkdtemp(path.join(os.tmpdir(), "cloudbox-launcher-"));
 	const scripts = path.join(root, "scripts");
 	await mkdir(scripts, { recursive: true });
-	await copyFile(LAUNCHER, path.join(scripts, "setup-cloudflare.sh"));
-	await chmod(path.join(scripts, "setup-cloudflare.sh"), 0o755);
+	await copyFile(LAUNCHER, path.join(scripts, "install_cloudbox.sh"));
+	await chmod(path.join(scripts, "install_cloudbox.sh"), 0o755);
 	await writeFile(path.join(scripts, "setup-cloudflare.mjs"), "export {}\n");
 	if (markers) {
 		for (const marker of [
@@ -283,7 +283,7 @@ test("reuses Node 22+, preserves cwd/args/stdin/exit, and does not log the token
 	const fake = await makeFakeBin(state, { withNode: true, checksum: false });
 	try {
 		const result = await runLauncher(
-			path.join(root, "scripts/setup-cloudflare.sh"),
+			path.join(root, "scripts/install_cloudbox.sh"),
 			{
 				cwd,
 				env: launcherEnv({
@@ -360,7 +360,7 @@ test("preserves a TTY for the exec'd Node process", async (t) => {
 					"-c",
 					code,
 					"/bin/sh",
-					path.join(root, "scripts/setup-cloudflare.sh"),
+					path.join(root, "scripts/install_cloudbox.sh"),
 					"--help",
 				],
 				{
@@ -409,7 +409,7 @@ test("maps all supported platforms to fixed URLs and SHA-256 values", async () =
 		});
 		try {
 			const result = await runLauncher(
-				path.join(root, "scripts/setup-cloudflare.sh"),
+				path.join(root, "scripts/install_cloudbox.sh"),
 				{
 					cwd: state,
 					env: launcherEnv({
@@ -480,7 +480,7 @@ test("installs fixed Node when Node is missing, old, or unparsable", async () =>
 				extra: { FAKE_NODE_VERSION: version ?? "v24.3.0" },
 			});
 			const result = await runLauncher(
-				path.join(root, "scripts/setup-cloudflare.sh"),
+				path.join(root, "scripts/install_cloudbox.sh"),
 				{
 					cwd: state,
 					env,
@@ -515,7 +515,7 @@ test("rejects a checksum mismatch before tar or Node execution", async () => {
 	});
 	try {
 		const result = await runLauncher(
-			path.join(root, "scripts/setup-cloudflare.sh"),
+			path.join(root, "scripts/install_cloudbox.sh"),
 			{
 				cwd: state,
 				env: launcherEnv({
@@ -576,7 +576,7 @@ exit 0
 			"#!/bin/sh\nexit 0\n",
 		);
 		const valid = await runLauncher(
-			path.join(root, "scripts/setup-cloudflare.sh"),
+			path.join(root, "scripts/install_cloudbox.sh"),
 			{
 				cwd: state,
 				env: launcherEnv({
@@ -599,7 +599,7 @@ exit 0
 			"#!/bin/sh\nprintf '%s\\n' 'v22.23.2'\n",
 		);
 		const corrupt = await runLauncher(
-			path.join(root, "scripts/setup-cloudflare.sh"),
+			path.join(root, "scripts/install_cloudbox.sh"),
 			{
 				cwd: state,
 				env: launcherEnv({
@@ -634,7 +634,7 @@ test("stops before networking when required download tools are missing", async (
 		});
 		try {
 			const result = await runLauncher(
-				path.join(root, "scripts/setup-cloudflare.sh"),
+				path.join(root, "scripts/install_cloudbox.sh"),
 				{
 					cwd: state,
 					env: launcherEnv({
@@ -686,7 +686,7 @@ test("rejects unsupported OS, architecture, and Linux musl explicitly", async ()
 		});
 		try {
 			const result = await runLauncher(
-				path.join(root, "scripts/setup-cloudflare.sh"),
+				path.join(root, "scripts/install_cloudbox.sh"),
 				{
 					cwd: state,
 					env: launcherEnv({
@@ -721,7 +721,7 @@ test("falls back to HOME/.local/share when XDG_DATA_HOME is empty", async () => 
 	try {
 		const home = path.join(state, "home");
 		const result = await runLauncher(
-			path.join(root, "scripts/setup-cloudflare.sh"),
+			path.join(root, "scripts/install_cloudbox.sh"),
 			{
 				cwd: state,
 				env: launcherEnv({
@@ -776,7 +776,7 @@ test("downloads and caches the fixed remote MJS without a trusted sibling", asyn
 			extra: { XDG_CACHE_HOME: cacheHome },
 		});
 		const downloaded = await runLauncher(
-			path.join(root, "scripts/setup-cloudflare.sh"),
+			path.join(root, "scripts/install_cloudbox.sh"),
 			{ cwd: state, env, args: ["--help"] },
 		);
 		assert.equal(downloaded.code, 0, downloaded.stderr);
@@ -791,7 +791,7 @@ test("downloads and caches the fixed remote MJS without a trusted sibling", asyn
 		assert.equal((await stat(cachePath)).mode & 0o777, 0o700);
 
 		const cached = await runLauncher(
-			path.join(root, "scripts/setup-cloudflare.sh"),
+			path.join(root, "scripts/install_cloudbox.sh"),
 			{ cwd: state, env, args: ["--help"] },
 		);
 		assert.equal(cached.code, 0, cached.stderr);
@@ -821,7 +821,7 @@ test("downloads the remote MJS before installing Node when Node is missing", asy
 	const cacheHome = path.join(state, "cache");
 	try {
 		const result = await runLauncher(
-			path.join(root, "scripts/setup-cloudflare.sh"),
+			path.join(root, "scripts/install_cloudbox.sh"),
 			{
 				cwd: state,
 				env: launcherEnv({
@@ -880,7 +880,7 @@ test("rehashes a mismatched remote cache and refuses to overwrite it", async () 
 		await writeFile(cachePath, "corrupt-cache\n", { mode: 0o700 });
 		await chmod(cachePath, 0o700);
 		const result = await runLauncher(
-			path.join(root, "scripts/setup-cloudflare.sh"),
+			path.join(root, "scripts/install_cloudbox.sh"),
 			{
 				cwd: state,
 				env: launcherEnv({
@@ -918,7 +918,7 @@ test("does not execute a same-directory MJS without project markers when remote 
 	const fake = await makeFakeBin(state, { withNode: true, checksum: false });
 	try {
 		const result = await runLauncher(
-			path.join(root, "scripts/setup-cloudflare.sh"),
+			path.join(root, "scripts/install_cloudbox.sh"),
 			{
 				cwd: state,
 				env: launcherEnv({

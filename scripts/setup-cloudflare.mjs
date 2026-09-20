@@ -2651,7 +2651,7 @@ async function main() {
 	const { help, ref } = parseSetupArgs(process.argv.slice(2));
 	if (help) {
 		console.log(
-			"推荐入口：sh scripts/setup-cloudflare.sh [--ref <完整40位SHA>]\n直接调用：node scripts/setup-cloudflare.mjs [--ref <完整40位SHA>]\n\n在当前 cwd 准备源码并交互式创建新的 Cloudflare Worker 与专用 R2 bucket。首次部署，不提供恢复或卸载。",
+			"推荐入口：bash scripts/install_cloudbox.sh [--ref <完整40位SHA>]\n直接调用：node scripts/setup-cloudflare.mjs [--ref <完整40位SHA>]\n\n在当前 cwd 准备源码并交互式创建新的 Cloudflare Worker 与专用 R2 bucket。首次部署，不提供恢复或卸载。",
 		);
 		return;
 	}

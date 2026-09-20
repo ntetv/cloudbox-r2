@@ -6,9 +6,15 @@
 
 部署时，Worker、Durable Object classes 和缺失的 R2 bucket 由 Wrangler 按根目录配置创建或绑定；部署前请确认当前账号和目标资源。
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/ntetv/cloudbox-r2)
+直接下载安装脚本（macOS/Linux）：
 
-根目录源码部署是推荐路径；顶部按钮保留为 Cloudflare 的快捷入口。
+```bash
+curl -fSsLO https://raw.githubusercontent.com/ntetv/cloudbox-r2/main/scripts/install_cloudbox.sh
+chmod +x install_cloudbox.sh
+bash install_cloudbox.sh
+```
+
+安装脚本会自动准备 Node.js、下载固定版本源码、安装依赖并启动首次部署向导。
 
 ## 核心能力
 
@@ -52,13 +58,13 @@ Worker 负责所有路由。未知路径不会回退到访客页面，错误的�
 已有完整源码时，在仓库根目录运行：
 
 ```bash
-sh scripts/setup-cloudflare.sh
+bash scripts/install_cloudbox.sh
 ```
 
 没有完整仓库时，也可以只保存 Shell 启动器并在想要放置源码的父目录运行：
 
 ```bash
-sh /root/setup-cloudflare.sh
+bash /root/install_cloudbox.sh
 ```
 
 Shell 启动器会优先验证并调用同目录、且位于完整仓库标记下的 `scripts/setup-cloudflare.mjs`；不会因为临时目录中出现同名文件就执行。若只需要直接运行现有 MJS，也可以把仓库中的 `scripts/setup-cloudflare.mjs` 单独保存为 `/root/setup-cloudflare.mjs`，然后在想要放置源码的父目录运行：

@@ -23,7 +23,7 @@ checksum_command=
 checksum_kind=
 
 fail() {
-	printf '%s\n' "setup-cloudflare: $*" >&2
+	printf '%s\n' "install_cloudbox: $*" >&2
 	exit 1
 }
 
