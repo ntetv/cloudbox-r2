@@ -21,9 +21,9 @@ const LAUNCHER = path.join(ROOT, "scripts/install_cloudbox.sh");
 const NODE_VERSION = "22.23.2";
 const TOKEN_CANARY = "launcher-token-canary";
 const REF = "0123456789abcdef0123456789abcdef01234567";
-const REMOTE_REF = "d7ea437a72131f2ce724b17958e16a23fb12a794";
+const REMOTE_REF = "d9d36a3173e7647c9007f8640b75ad75ed924dcf";
 const REMOTE_SHA256 =
-	"9b174622df4570dbc9bbdc57d848d25284bf73f77afb159074fc62eb6b389058";
+	"a8d9c520da5716337ee1addbfc4d1e9707d39f8796726557dd9ab9ac248a6cd1";
 const REMOTE_URL = `https://raw.githubusercontent.com/ntetv/cloudbox-r2/${REMOTE_REF}/scripts/setup-cloudflare.mjs`;
 const SHAS = {
 	"darwin-x64":
