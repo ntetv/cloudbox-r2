@@ -68,6 +68,7 @@ async function runDeploymentScenario(
 test("mock workflow performs dry-run, double preflight, bucket, seven secrets, deploy, and HTTP check", async () => {
 	const calls = [];
 	const stages = [];
+	const progress = [];
 	const result = await runWorkflow({
 		apiToken: "test-token",
 		pnpm,
@@ -104,9 +105,15 @@ test("mock workflow performs dry-run, double preflight, bucket, seven secrets, d
 		confirm: async () => true,
 		fetchImpl: async () =>
 			new Response("<title>Cloudbox</title>", { status: 200 }),
+		onProgress: (message) => progress.push(message),
 		onStage: (stage) => stages.push(stage),
 	});
+	assert.equal(result.status, "deployed");
 	assert.match(result.url, /mock-worker\.account\.workers\.dev/);
+	assert.deepEqual(progress, [
+		"部署前检查中：正在构建并检查目标资源，请稍等…",
+		"开始部署：正在创建资源并发布 Worker，请稍等…",
+	]);
 	assert.deepEqual(stages, [
 		"R2 bucket mock-bucket",
 		"七项 secrets",
@@ -220,6 +227,7 @@ test("workflow ignores invalid and conflicting deployment URLs", async () => {
 
 test("mock workflow cancellation performs no writes", async () => {
 	const writes = [];
+	const progress = [];
 	const result = await runWorkflow({
 		apiToken: "test-token",
 		pnpm,
@@ -239,8 +247,11 @@ test("mock workflow cancellation performs no writes", async () => {
 			return { code: 0, stdout: "", stderr: "" };
 		},
 		confirm: async () => false,
+		onProgress: (message) => progress.push(message),
 	});
+	assert.equal(result.status, "cancelled");
 	assert.deepEqual(result.completed, []);
+	assert.deepEqual(progress, ["部署前检查中：正在构建并检查目标资源，请稍等…"]);
 	assert.deepEqual(writes, []);
 });
 

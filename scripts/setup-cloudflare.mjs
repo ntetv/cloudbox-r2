@@ -547,6 +547,76 @@ export async function askSecret(
 		inputStream.once("end", onEnd);
 	});
 }
+
+function askWithDefault(rl, question, defaultValue, validator, message) {
+	return rl.question(question).then((value) => {
+		const candidate = value.trim() === "" ? defaultValue : value.trim();
+		const valid = validator(candidate);
+		if (!valid) fail(message);
+		return valid;
+	});
+}
+
+export async function promptDeploymentInputs(rl) {
+	const apiToken = await ask(
+		rl,
+		"Cloudflare API Token：",
+		validateApiToken,
+		"API Token 格式无效。",
+	);
+	const accountId = await ask(
+		rl,
+		"Cloudflare 账号 ID：",
+		(value) => (/^[a-f0-9]{32}$/i.test(value.trim()) ? value.trim() : null),
+		"Cloudflare 账号 ID 格式无效。",
+	);
+	const workerName = await askWithDefault(
+		rl,
+		`新 Worker 名称（回车默认 ${DEFAULT_SOURCE_WORKER_NAME}）：`,
+		DEFAULT_SOURCE_WORKER_NAME,
+		validateWorkerName,
+		"Worker 名称格式无效。",
+	);
+	const bucketName = await askWithDefault(
+		rl,
+		`新 R2 bucket 名称（回车默认 ${DEFAULT_SOURCE_BUCKET_NAME}）：`,
+		DEFAULT_SOURCE_BUCKET_NAME,
+		validateBucketName,
+		"R2 bucket 名称格式无效。",
+	);
+	const adminPath = await ask(
+		rl,
+		"管理入口（5–12 字符）：",
+		(value) => validateAdminPath(value.trim()),
+		"管理入口必须是 5–12 个 ASCII 字符。",
+	);
+	const username = await ask(
+		rl,
+		"管理员用户名：",
+		validateUsername,
+		"用户名不能为空且最多 256 UTF-8 字节。",
+	);
+	const password = await ask(
+		rl,
+		"管理员密码：",
+		(value) => validatePassword(value, username),
+		"密码需 6–16 UTF-8 字节且不能等于用户名。",
+	);
+	await ask(
+		rl,
+		"再次输入管理员密码：",
+		(value) => (value === password ? value : null),
+		"两次密码不一致。",
+	);
+	return {
+		apiToken,
+		accountId,
+		workerName,
+		bucketName,
+		secrets: makeSecrets({ adminPath, username, password }),
+	};
+}
+
 function confirm(value) {
 	return /^(y|yes)$/i.test(value.trim());
 }
@@ -1006,7 +1076,7 @@ export async function deriveConfig(
 		fail("配置临时目录标识无效。");
 	if (!validateWorkerName(workerName)) fail("Worker 名称格式无效。");
 	if (!validateBucketName(bucketName)) fail("bucket 名称格式无效。");
-	if (!/^[a-f0-9]{32}$/i.test(accountId)) fail("账号 ID 格式无效。");
+	if (!/^[a-f0-9]{32}$/i.test(accountId)) fail("Cloudflare 账号 ID 格式无效。");
 	const resolvedRoot = resolveRoot(root);
 	const source = await readFile(
 		path.join(resolvedRoot, "wrangler.toml"),
@@ -1285,11 +1355,13 @@ export async function runWorkflow({
 	wranglerRunner = wrangler,
 	confirm = async () => false,
 	fetchImpl = fetch,
+	onProgress = () => {},
 	onStage = () => {},
 	root = DEFAULT_ROOT ?? ROOT,
 } = {}) {
 	const resolvedRoot = resolveRoot(root);
 	if (!validateApiToken(apiToken)) fail("Cloudflare API Token 格式无效。");
+	onProgress("部署前检查中：正在构建并检查目标资源，请稍等…");
 	const config = await deriveConfig(
 		workerName,
 		bucketName,
@@ -1385,7 +1457,8 @@ export async function runWorkflow({
 	};
 	await preflight();
 	if (!(await confirm({ accountId, workerName, bucketName })))
-		return { config, completed: [] };
+		return { config, status: "cancelled", completed: [] };
+	onProgress("开始部署：正在创建资源并发布 Worker，请稍等…");
 	await preflight();
 	let created;
 	try {
@@ -1443,14 +1516,14 @@ export async function runWorkflow({
 			workerName,
 			fetchImpl,
 		);
-	if (!url) return { config, url: null };
+	if (!url) return { config, status: "deployed", url: null };
 	let homeCheckError = null;
 	try {
 		await checkHome(`${url}/`, fetchImpl);
 	} catch (error) {
 		homeCheckError = error instanceof Error ? error.message : "首页验证失败。";
 	}
-	return { config, url, homeCheckError };
+	return { config, status: "deployed", url, homeCheckError };
 }
 
 function runToolWith(run, tool, args, options) {
@@ -2603,7 +2676,12 @@ async function main() {
 			console.log(
 				`源码已准备到 ${source.target}（固定 commit ${source.ref}）。`,
 			);
-		rl = createInterface({ input: stdin, output: stdout, terminal: true });
+		rl = createInterface({
+			input: stdin,
+			output: stdout,
+			terminal: true,
+			historySize: 0,
+		});
 		let cancelled = false;
 		onTerminate = () => {
 			cancelled = true;
@@ -2633,56 +2711,11 @@ async function main() {
 			});
 			stopIfCancelled();
 			assertCommandSuccess(installed, "依赖安装");
-			const apiToken = await askSecret(
-				rl,
-				"Cloudflare API Token（输入不会回显）：",
-				validateApiToken,
-				"API Token 格式无效。",
+			console.warn(
+				"安全提示：当前模式会在终端显示 API Token、管理入口和管理员密码；请勿在共享、录屏或审计终端执行。",
 			);
-			const accountId = await ask(
-				rl,
-				"账号 ID：",
-				(v) => (/^[a-f0-9]{32}$/i.test(v.trim()) ? v.trim() : null),
-				"账号 ID 格式无效。",
-			);
-			const workerName = await ask(
-				rl,
-				"新 Worker 名称：",
-				(v) => validateWorkerName(v.trim()),
-				"Worker 名称格式无效。",
-			);
-			const bucketName = await ask(
-				rl,
-				"新 R2 bucket 名称：",
-				(v) => validateBucketName(v.trim()),
-				"bucket 名称格式无效。",
-			);
-			const adminPath = await askSecret(
-				rl,
-				"管理入口（5–12 字符）：",
-				(v) => validateAdminPath(v.trim()),
-				"管理入口格式无效。",
-			);
-			const username = await askSecret(
-				rl,
-				"管理员用户名：",
-				(v) => validateUsername(v),
-				"用户名不能为空且最多 256 UTF-8 字节。",
-			);
-			const password = await askSecret(
-				rl,
-				"管理员密码：",
-				(v) => validatePassword(v, username),
-				"密码需 6–16 UTF-8 字节且不能等于用户名。",
-			);
-			const repeat = await askSecret(
-				rl,
-				"再次输入管理员密码：",
-				(v) => (v === password ? v : null),
-				"两次密码不一致。",
-			);
-			void repeat;
-			const secrets = makeSecrets({ adminPath, username, password });
+			const { apiToken, accountId, workerName, bucketName, secrets } =
+				await promptDeploymentInputs(rl);
 			const result = await runWorkflow({
 				root,
 				pnpm,
@@ -2704,10 +2737,13 @@ async function main() {
 					);
 					return confirm(await rl.question("确认创建并部署？[y/N] "));
 				},
+				onProgress: (message) => console.log(message),
 				onStage: (stage) => completed.push(stage),
 			});
 			stopIfCancelled();
-			if (result.url) {
+			if (result.status === "cancelled") {
+				console.log("已取消，未创建云端资源。");
+			} else if (result.url) {
 				console.log(`部署成功：${result.url}`);
 				if (result.homeCheckError)
 					console.error(`首页验证警告：${result.homeCheckError}`);

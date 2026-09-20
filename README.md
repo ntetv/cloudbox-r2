@@ -73,13 +73,13 @@ Shell 启动器会复用当前 PATH 中可解析为 Node.js `22` 或更高版本
 
 单文件模式默认固定 `ntetv/cloudbox-r2` commit `b168336b35c4a6d93c97c18dcfab17cc8c46ac00`，只从 HTTPS `codeload.github.com` 下载源码，并在当前 cwd 创建 `cloudbox-r2-b168336b35c4`。目标已存在时会拒绝且不覆盖。源码下载完成后才会收集 Token；解包使用 npm registry 的固定 `tar@7.5.14`（Node.js `>=22`，固定 tarball SRI 与隐藏 npm lock、完整传递依赖版本/resolved/integrity 校验、通过 npm `--ignore-scripts` 安装），并在受限 Node worker 中执行，带固定内存、时间、输出、下载和解压大小上限，不调用系统 `tar`。网络需要访问 `codeload.github.com` 和 `registry.npmjs.org`；该流程不使用 Git、GitHub API 或远端源码中不存在的 setup 文件。
 
-需要官方 Node.js 22+（含 npm）；向导会在目标源码的隔离目录准备固定版本 pnpm 9.15.4，并使用锁定的 Wrangler 4.51.0。单文件模式只支持 Linux/macOS，因为固定 commit 的构建脚本包含 Unix `rm`/`cp`；Windows 会在构建前明确拒绝，本地兼容 build 版本尚未发布。它只支持交互式终端，会先构建和 dry-run 检查，再在明确确认后创建新的 Worker、专用 R2 bucket、七个 Worker secrets 并部署。每次只能使用全新的 Worker 和 bucket 名称；向导不会覆盖、迁移、恢复或卸载现有资源。源码准备期间收到 SIGINT/SIGTERM 会清理向导拥有的临时目录和侧锁；SIGKILL 无法被捕获，不能保证本机清理，但侧锁会记录向导标记、PID 和时间，下一次仅在确认 PID 已不存在且锁确属本向导时回收，其他锁不会删除。
+需要官方 Node.js 22+（含 npm）；向导会在目标源码的隔离目录准备固定版本 pnpm 9.15.4，并使用锁定的 Wrangler 4.51.0。单文件模式只支持 Linux/macOS，因为固定 commit 的构建脚本包含 Unix `rm`/`cp`；Windows 会在构建前明确拒绝，本地兼容 build 版本尚未发布。它只支持交互式终端，会显示部署前检查和开始部署两个固定状态，先构建和 dry-run 检查，再在明确确认后创建新的 Worker、专用 R2 bucket、七个 Worker secrets 并部署。每次只能使用全新的 Worker 和 bucket 名称；向导不会覆盖、迁移、恢复或卸载现有资源。源码准备期间收到 SIGINT/SIGTERM 会清理向导拥有的临时目录和侧锁；SIGKILL 无法被捕获，不能保证本机清理，但侧锁会记录向导标记、PID 和时间，下一次仅在确认 PID 已不存在且锁确属本向导时回收，其他锁不会删除。
 
 无论真实部署成功、失败、取消，还是 bucket/secrets 已部分写入后失败，向导都会在主流程 `finally` 中尝试清理本次 standalone bootstrap 生成的 `cloudbox-r2-<SHA 前 12 位>` 源码副本、`.wrangler/setup` 内的配置/pnpm/tar 临时目录和日志，以及当前执行的固定远程 MJS 缓存。完整用户仓库模式不会删除仓库源码；只清理传入 root 下的 `.wrangler/setup` 命名空间，不碰其他 `.wrangler` 状态。`${XDG_DATA_HOME:-$HOME/.local/share}/cloudbox-r2/node-v...` 官方 Node.js 用户缓存会保留，sibling 模式脚本和根源码会保留。清理只使用 Node 文件 API、精确的本次调用标记和路径校验，不执行资源删除命令；不会删除或修改任何 GitHub 历史 commit，也不会删除 R2、Worker、Durable Objects 或 secrets。SIGKILL 发生在 `finally` 之前时仍可能留下这些本机生成物，需要人工检查。
 
 部署成功后，向导会合并 Wrangler 的 stdout 和 stderr，只接受与所选 Worker 匹配的 `https://<worker>.<account>.workers.dev` 地址；若 Wrangler 没有输出地址，向导会使用当前 API Token 请求账号 Workers subdomain API（`GET /accounts/<ACCOUNT_ID>/workers/subdomain`），严格校验 `result.subdomain` 后组合出 `https://<worker>.<subdomain>.workers.dev`。地址找到后会检查首页；首页响应未包含预期页面标记时，部署地址仍会输出，同时显示首页验证警告，便于手动访问排查。API 不可用、响应无效、关闭 `workers_dev` 或使用自定义域名时，部署仍视为成功，并提示到 Cloudflare Dashboard 查看域名配置。
 
-需要先在 Cloudflare Dashboard 创建一个**账号范围** API Token。向导只接受此 Token 和单独输入的 32 位十六进制 Account ID；Account ID 不是第二个凭据。Token 只在当前进程内存中保存，仅注入 Wrangler 子进程和固定 Cloudflare API 请求的 `Authorization` header，不会进入 npm/pnpm、构建命令、参数、配置或日志。向导不会调用 `wrangler login`、OAuth、浏览器登录、Global API Key 或邮箱密码，也不依赖本机已有 OAuth 状态。
+需要先在 Cloudflare Dashboard 创建一个**账号范围** API Token。向导只接受此 Token 和单独输入的 32 位十六进制 Cloudflare 账号 ID；账号 ID 不是第二个凭据。当前交互模式会显式显示所有手动输入，包括 API Token、管理入口和管理员密码；向导不会主动把这些值写入 npm/pnpm、构建命令、参数、配置或 Wrangler 日志，但终端本身可能被录屏、共享屏幕、SSH 审计或旁观者捕获，请只在可信终端运行。Token 仍只在当前进程内存中保存，并仅注入 Wrangler 子进程和固定 Cloudflare API 请求的 `Authorization` header。向导不会调用 `wrangler login`、OAuth、浏览器登录、Global API Key 或邮箱密码，也不依赖本机已有 OAuth 状态。
 
 请在 Cloudflare 官方 [API Token 权限参考](https://developers.cloudflare.com/fundamentals/api/reference/permissions/) 和 [Workers 授权说明](https://developers.cloudflare.com/workers/authorization/workers/) 中按当前界面选择最小的账号级权限：Worker 脚本部署/编辑、R2 bucket 创建与管理、Durable Objects namespace/migration 管理，以及 Workers Assets 所属的 Worker 脚本部署权限；仅当使用路由或自定义域名时再增加对应的 Routes 权限。优先使用官方 “Edit Cloudflare Workers” 模板后收窄到目标账号，并按权限参考核对当前名称，不要凭旧名称创建权限。Token 必须能读取目标账号的 Worker 部署列表和 R2 bucket 信息；向导会用这些只读请求预检权限，不要求 `whoami`、用户或邮箱权限。
 
@@ -91,7 +91,7 @@ Shell 启动器会复用当前 PATH 中可解析为 Node.js `22` 或更高版本
 
 需要 Cloudflare Workers、R2 和 Durable Objects 权限、Node.js `22` 或更高版本，以及 pnpm `9.15.4`。仓库脚本使用 workspace 内固定的 Wrangler `4.51.0`，不使用 `npx` 随机安装。
 
-根配置默认 Worker 和 bucket 名称均为 `cloudbox-r2`，这是未确认的目标占位配置，不代表已存在或已授权的生产资源。部署前请审核账号、资源名称和计费影响；如需不同名称，先修改根目录 `wrangler.toml`。向导会读取根配置中的唯一顶层 Worker `name` 和唯一 `bucket_name` 字段生成临时配置，不要求它们仍叫 `cloudbox-r2`；`validate-deploy-config` 默认只校验必要结构，也可通过 `--worker-name` 与 `--bucket-name` 校验动态配置。单文件下载会额外校验快照身份仍是固定源项目默认名称，避免把未预期的源码变体当成下载结果；向导始终先执行结构校验，只有快照自带 validator 支持动态参数时才调用 pnpm validator，旧快照的品牌硬编码不会阻断自定义名称。
+根配置默认 Worker 和 bucket 名称均为 `cloudbox-r2`，这是未确认的目标占位配置，不代表已存在或已授权的生产资源。首次部署向导中，Worker 和 R2 bucket 输入直接回车也会分别使用 `cloudbox-r2`；非空输入仍必须符合名称格式。部署前请审核账号、资源名称和计费影响；如需不同名称，可在提示处输入自定义名称。默认名称或自定义名称只要已存在，向导都会停止，不覆盖或复用资源。向导会读取根配置中的唯一顶层 Worker `name` 和唯一 `bucket_name` 字段生成临时配置，不要求它们仍叫 `cloudbox-r2`；`validate-deploy-config` 默认只校验必要结构，也可通过 `--worker-name` 与 `--bucket-name` 校验动态配置。单文件下载会额外校验快照身份仍是固定源项目默认名称，避免把未预期的源码变体当成下载结果；向导始终先执行结构校验，只有快照自带 validator 支持动态参数时才调用 pnpm validator，旧快照的品牌硬编码不会阻断自定义名称。
 
 ### 2. 使用 Token 检查配置
 

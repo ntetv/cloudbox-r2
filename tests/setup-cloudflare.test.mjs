@@ -10,6 +10,7 @@ import {
 	deriveConfig,
 	ensurePnpm,
 	makeSecrets,
+	promptDeploymentInputs,
 	runCommand,
 	secretBulk,
 	validateAdminPath,
@@ -36,6 +37,55 @@ test("validates resource names and UTF-8 boundaries", () => {
 	assert.equal(validatePassword("密码123", "admin"), "密码123");
 	assert.equal(validatePassword("12345", "admin"), null);
 	assert.equal(byteLength("密码123"), 9);
+});
+
+test("collects visible inputs and defaults empty resource names", async () => {
+	const prompts = [];
+	const values = [
+		"visible-token",
+		"0123456789abcdef0123456789abcdef",
+		"",
+		"   ",
+		"admin",
+		"user",
+		"password",
+		"password",
+	];
+	const result = await promptDeploymentInputs({
+		question: async (question) => {
+			prompts.push(question);
+			return values.shift();
+		},
+	});
+	assert.equal(result.apiToken, "visible-token");
+	assert.equal(result.accountId, "0123456789abcdef0123456789abcdef");
+	assert.equal(result.workerName, "cloudbox-r2");
+	assert.equal(result.bucketName, "cloudbox-r2");
+	assert.equal(result.secrets.CLOUDBOX_R2_ADMIN_PATH, "admin");
+	assert.equal(result.secrets.ADMIN_USERNAME, "user");
+	assert.equal(result.secrets.ADMIN_PASSWORD, "password");
+	assert.ok(prompts.every((question) => !question.includes("输入不会回显")));
+	assert.deepEqual(prompts.slice(0, 4), [
+		"Cloudflare API Token：",
+		"Cloudflare 账号 ID：",
+		"新 Worker 名称（回车默认 cloudbox-r2）：",
+		"新 R2 bucket 名称（回车默认 cloudbox-r2）：",
+	]);
+});
+
+test("rejects non-empty invalid resource names instead of using defaults", async () => {
+	const values = [
+		"visible-token",
+		"0123456789abcdef0123456789abcdef",
+		"bad_name",
+	];
+	await assert.rejects(
+		() =>
+			promptDeploymentInputs({
+				question: async () => values.shift(),
+			}),
+		/Worker 名称格式无效/,
+	);
 });
 
 test("creates seven distinct secrets", () => {
