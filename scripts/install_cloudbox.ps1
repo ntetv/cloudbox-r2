@@ -27,6 +27,7 @@ function Fail([string] $Message) {
 
 try {
     Add-Type -AssemblyName System.Net.Http
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 } catch {
     Fail "无法加载 .NET System.Net.Http 组件。"
 }
@@ -108,13 +109,21 @@ function Download-FixedFile([string] $Url, [string] $Destination, [string] $Expe
     $hostName = $initial.Host
     $handler = New-Object System.Net.Http.HttpClientHandler
     $handler.AllowAutoRedirect = $false
+    $handler.UseProxy = $true
+    $handler.UseDefaultCredentials = $true
     $client = New-Object System.Net.Http.HttpClient($handler)
     $client.Timeout = [TimeSpan]::FromSeconds(120)
     $current = $initial
     try {
         for ($redirect = 0; $redirect -le 3; $redirect++) {
             $request = New-Object System.Net.Http.HttpRequestMessage([System.Net.Http.HttpMethod]::Get, $current)
-            $response = $client.SendAsync($request, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
+            try {
+                $response = $client.SendAsync($request, [System.Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
+            } catch {
+                $detail = $_.Exception
+                while ($null -ne $detail.InnerException) { $detail = $detail.InnerException }
+                Fail "固定下载网络请求失败：$($detail.Message)"
+            }
             try {
                 if ([int]$response.StatusCode -ge 300 -and [int]$response.StatusCode -lt 400) {
                     if ($redirect -eq 3 -or $null -eq $response.Headers.Location) {
