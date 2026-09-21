@@ -10,7 +10,7 @@ import {
 	runWorkflow,
 	validateApiToken,
 	wrangler,
-} from "../scripts/setup-cloudflare.mjs";
+} from "../scripts/install_cloudbox.mjs";
 
 const pnpm = { command: process.execPath, args: ["fake-pnpm.cjs"] };
 const secrets = {

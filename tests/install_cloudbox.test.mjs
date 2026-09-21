@@ -20,7 +20,7 @@ import {
 	validatePassword,
 	validateUsername,
 	validateWorkerName,
-} from "../scripts/setup-cloudflare.mjs";
+} from "../scripts/install_cloudbox.mjs";
 
 test("validates resource names and UTF-8 boundaries", () => {
 	assert.equal(validateWorkerName("new-worker"), "new-worker");

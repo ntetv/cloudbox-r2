@@ -40,4 +40,4 @@ jobs:
         with:
           node-version: "22.x"
       - name: Run launcher fake-PATH tests
-        run: node --test tests/setup-cloudflare-launcher.test.mjs
+        run: node --test tests/install_cloudbox-launcher.test.mjs

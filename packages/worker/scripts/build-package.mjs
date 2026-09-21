@@ -1,7 +1,7 @@
 import { cp, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { runCommand } from "../../../scripts/setup-cloudflare.mjs";
+import { runCommand } from "../../../scripts/install_cloudbox.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const workerDirectory = path.resolve(scriptDirectory, "..");

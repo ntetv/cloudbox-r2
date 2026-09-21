@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deploymentUrl, secretBulk } from "../scripts/setup-cloudflare.mjs";
+import { deploymentUrl, secretBulk } from "../scripts/install_cloudbox.mjs";
 
 const validSecrets = {
 	CLOUDBOX_R2_ADMIN_PATH: "admin",

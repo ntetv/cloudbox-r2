@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { runCommand } from "../scripts/setup-cloudflare.mjs";
+import { runCommand } from "../scripts/install_cloudbox.mjs";
 
 const WRANGLER = path.join(
 	process.cwd(),

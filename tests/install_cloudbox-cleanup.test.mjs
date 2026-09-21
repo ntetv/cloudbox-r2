@@ -22,7 +22,7 @@ import {
 	ensureSetupNamespace,
 	makeSecrets,
 	runWorkflow,
-} from "../scripts/setup-cloudflare.mjs";
+} from "../scripts/install_cloudbox.mjs";
 
 const accountId = "0123456789abcdef0123456789abcdef";
 const secrets = makeSecrets({
@@ -200,7 +200,7 @@ test("cleanup refuses symlink targets, setup namespaces, and MJS caches", async 
 		const cacheDirectory = path.join(cwd, "cache", "cloudbox-r2");
 		const cachePath = path.join(
 			cacheDirectory,
-			`setup-cloudflare-${REMOTE_MJS_REF}.mjs`,
+			`install_cloudbox-${REMOTE_MJS_REF}.mjs`,
 		);
 		await mkdir(cacheDirectory, { recursive: true });
 		await symlink(path.join(outside, "payload"), cachePath);
@@ -279,7 +279,7 @@ test("fixed remote MJS cache cleanup removes only the current fixed payload", as
 	const cacheDirectory = path.join(home, ".cache", "cloudbox-r2");
 	const cachePath = path.join(
 		cacheDirectory,
-		`setup-cloudflare-${REMOTE_MJS_REF}.mjs`,
+		`install_cloudbox-${REMOTE_MJS_REF}.mjs`,
 	);
 	const otherPath = path.join(cacheDirectory, "other-payload.mjs");
 	try {

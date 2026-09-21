@@ -67,7 +67,7 @@ resolve_script_directory() {
 }
 
 trusted_sibling_mjs() {
-	[ -f "$script_directory/setup-cloudflare.mjs" ] || return 1
+	[ -f "$script_directory/install_cloudbox.mjs" ] || return 1
 	if ! project_root=$(CDPATH= cd -P "$script_directory/.." 2>/dev/null && pwd -P); then
 		return 1
 	fi
@@ -127,7 +127,7 @@ resolve_remote_cache() {
 		*) fail "XDG_CACHE_HOME 必须是绝对路径。" ;;
 	esac
 	remote_cache_parent=$cache_home/cloudbox-r2
-	remote_cache_path=$remote_cache_parent/setup-cloudflare-${REMOTE_MJS_REF}.mjs
+	remote_cache_path=$remote_cache_parent/install_cloudbox-${REMOTE_MJS_REF}.mjs
 }
 
 use_cached_remote_mjs() {
@@ -173,15 +173,15 @@ download_remote_mjs() {
 	if ! chmod 700 "$remote_cache_parent"; then
 		fail "无法将固定 MJS 用户缓存目录设为私有：$remote_cache_parent"
 	fi
-	if ! staging=$(mktemp -d "$remote_cache_parent/.setup-cloudflare-${REMOTE_MJS_REF}.XXXXXX"); then
+	if ! staging=$(mktemp -d "$remote_cache_parent/.install_cloudbox-${REMOTE_MJS_REF}.XXXXXX"); then
 		fail "无法创建私有固定 MJS staging 目录。"
 	fi
 	if ! chmod 700 "$staging"; then
 		fail "无法将固定 MJS staging 目录设为私有。"
 	fi
 
-	remote_mjs_tmp=$staging/setup-cloudflare.mjs
-	remote_mjs_url=https://raw.githubusercontent.com/ntetv/cloudbox-r2/$REMOTE_MJS_REF/scripts/setup-cloudflare.mjs
+	remote_mjs_tmp=$staging/install_cloudbox.mjs
+	remote_mjs_url=https://raw.githubusercontent.com/ntetv/cloudbox-r2/$REMOTE_MJS_REF/scripts/install_cloudbox.mjs
 	if ! curl --fail --silent --show-error --location \
 		--proto '=https' --proto-redir '=https' --max-redirs 3 \
 		--connect-timeout 10 --max-time 120 \
@@ -197,7 +197,7 @@ download_remote_mjs() {
 		fail "无法将固定 MJS payload 设为私有。"
 	fi
 
-	remote_lock_path=$remote_cache_parent/.setup-cloudflare-${REMOTE_MJS_REF}.publish
+	remote_lock_path=$remote_cache_parent/.install_cloudbox-${REMOTE_MJS_REF}.publish
 	if ! mkdir "$remote_lock_path" 2>/dev/null; then
 		if [ -e "$remote_cache_path" ] || [ -L "$remote_cache_path" ]; then
 			if use_cached_remote_mjs; then
@@ -232,7 +232,7 @@ download_remote_mjs() {
 
 resolve_mjs() {
 	if trusted_sibling_mjs; then
-		mjs_path=$script_directory/setup-cloudflare.mjs
+		mjs_path=$script_directory/install_cloudbox.mjs
 		return
 	fi
 	if [ -z "$REMOTE_MJS_REF" ] || [ -z "$REMOTE_MJS_SHA256" ]; then

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { makeSecrets, runWorkflow } from "../scripts/setup-cloudflare.mjs";
+import { makeSecrets, runWorkflow } from "../scripts/install_cloudbox.mjs";
 
 const secrets = makeSecrets({
 	adminPath: "admin",

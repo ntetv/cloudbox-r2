@@ -24,7 +24,7 @@ const REF = "0123456789abcdef0123456789abcdef01234567";
 const REMOTE_REF = "d9d36a3173e7647c9007f8640b75ad75ed924dcf";
 const REMOTE_SHA256 =
 	"a8d9c520da5716337ee1addbfc4d1e9707d39f8796726557dd9ab9ac248a6cd1";
-const REMOTE_URL = `https://raw.githubusercontent.com/ntetv/cloudbox-r2/${REMOTE_REF}/scripts/setup-cloudflare.mjs`;
+const REMOTE_URL = `https://raw.githubusercontent.com/ntetv/cloudbox-r2/${REMOTE_REF}/scripts/install_cloudbox.mjs`;
 const SHAS = {
 	"darwin-x64":
 		"58e99022c2ff89395576cc7fd4d98cea24bb68081475d5f88b801ee8729fb026",
@@ -54,7 +54,7 @@ async function makeFixture({ markers = true } = {}) {
 	await mkdir(scripts, { recursive: true });
 	await copyFile(LAUNCHER, path.join(scripts, "install_cloudbox.sh"));
 	await chmod(path.join(scripts, "install_cloudbox.sh"), 0o755);
-	await writeFile(path.join(scripts, "setup-cloudflare.mjs"), "export {}\n");
+	await writeFile(path.join(scripts, "install_cloudbox.mjs"), "export {}\n");
 	if (markers) {
 		for (const marker of [
 			"package.json",
@@ -763,7 +763,7 @@ test("downloads and caches the fixed remote MJS without a trusted sibling", asyn
 	const cachePath = path.join(
 		cacheHome,
 		"cloudbox-r2",
-		`setup-cloudflare-${REMOTE_REF}.mjs`,
+		`install_cloudbox-${REMOTE_REF}.mjs`,
 	);
 	try {
 		const env = launcherEnv({
@@ -849,7 +849,7 @@ test("downloads the remote MJS before installing Node when Node is missing", asy
 				path.join(
 					cacheHome,
 					"cloudbox-r2",
-					`setup-cloudflare-${REMOTE_REF}.mjs`,
+					`install_cloudbox-${REMOTE_REF}.mjs`,
 				),
 			),
 			true,
@@ -873,7 +873,7 @@ test("rehashes a mismatched remote cache and refuses to overwrite it", async () 
 	const cachePath = path.join(
 		cacheHome,
 		"cloudbox-r2",
-		`setup-cloudflare-${REMOTE_REF}.mjs`,
+		`install_cloudbox-${REMOTE_REF}.mjs`,
 	);
 	try {
 		await mkdir(path.dirname(cachePath), { recursive: true, mode: 0o700 });

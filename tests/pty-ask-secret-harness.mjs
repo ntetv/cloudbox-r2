@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
-import { askSecret } from "../scripts/setup-cloudflare.mjs";
+import { askSecret } from "../scripts/install_cloudbox.mjs";
 
 const rl = createInterface({ input: stdin, output: stdout, terminal: true });
 const hash = (value) => createHash("sha256").update(value).digest("hex");

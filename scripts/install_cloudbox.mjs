@@ -115,7 +115,7 @@ const SETUP_MARKER_KIND = "cloudbox-r2-setup-namespace-v1";
 const SETUP_MARKER_FILE = ".cloudbox-r2-setup-managed";
 const MANAGED_TARGET_MARKER_KIND = "cloudbox-r2-bootstrap-target-v1";
 const MANAGED_TARGET_MARKER_FILE = ".cloudbox-r2-bootstrap-managed.json";
-const REMOTE_MJS_CACHE_FILE = `setup-cloudflare-${REMOTE_MJS_REF}.mjs`;
+const REMOTE_MJS_CACHE_FILE = `install_cloudbox-${REMOTE_MJS_REF}.mjs`;
 const SETUP_MARKER_CONTENT = `${SETUP_MARKER_KIND}\n`;
 
 function resolveRoot(root = ROOT) {
@@ -2651,7 +2651,7 @@ async function main() {
 	const { help, ref } = parseSetupArgs(process.argv.slice(2));
 	if (help) {
 		console.log(
-			"推荐入口：bash scripts/install_cloudbox.sh [--ref <完整40位SHA>]\n直接调用：node scripts/setup-cloudflare.mjs [--ref <完整40位SHA>]\n\n在当前 cwd 准备源码并交互式创建新的 Cloudflare Worker 与专用 R2 bucket。首次部署，不提供恢复或卸载。",
+			"推荐入口：bash scripts/install_cloudbox.sh [--ref <完整40位SHA>]\n直接调用：node scripts/install_cloudbox.mjs [--ref <完整40位SHA>]\n\n在当前 cwd 准备源码并交互式创建新的 Cloudflare Worker 与专用 R2 bucket。首次部署，不提供恢复或卸载。",
 		);
 		return;
 	}

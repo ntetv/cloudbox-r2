@@ -38,7 +38,7 @@ import {
 	runCommand,
 	sourceArchiveUrl,
 	validateSourceRef,
-} from "../scripts/setup-cloudflare.mjs";
+} from "../scripts/install_cloudbox.mjs";
 
 function fakeTar(entries, { write = false } = {}) {
 	return {
@@ -728,7 +728,7 @@ test("bootstrap recovers a SIGKILL-stalled child lock on rerun", async () => {
 	);
 	const reservation = `${target}.bootstrap-lock`;
 	const scriptUrl = pathToFileURL(
-		path.resolve(process.cwd(), "scripts/setup-cloudflare.mjs"),
+		path.resolve(process.cwd(), "scripts/install_cloudbox.mjs"),
 	).href;
 	const childCode = `
 		import { bootstrapSource } from ${JSON.stringify(scriptUrl)};
