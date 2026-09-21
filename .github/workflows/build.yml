@@ -22,7 +22,7 @@ jobs:
       - name: Check setup launcher
         run: pnpm test:setup
       - name: Check lint
-        run: pnpm run lint
+        run: pnpm run lint:posix
       - name: Build
         run: pnpm build
       - name: Check package
@@ -41,3 +41,36 @@ jobs:
           node-version: "22.x"
       - name: Run launcher fake-PATH tests
         run: node --test tests/install_cloudbox-launcher.test.mjs
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22.x"
+      - name: Install pnpm
+        run: npm install --global pnpm@9.15.4
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Parse PowerShell helper
+        shell: powershell
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("scripts/install_cloudbox.ps1", [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { $errors | Out-String | Write-Error; exit 1 }
+      - name: Run Windows launcher tests
+        run: pnpm test:windows-launcher
+      - name: Run cross-platform MJS tests
+        run: node --test tests/install_cloudbox.test.mjs tests/install_cloudbox-flow.test.mjs tests/install_cloudbox-workflow.test.mjs
+      - name: Build
+        run: pnpm build
+      - name: Check package
+        run: pnpm --filter ./packages/worker package
+      - name: BAT help smoke test
+        run: cmd /d /s /c "scripts\install_cloudbox.bat --help"

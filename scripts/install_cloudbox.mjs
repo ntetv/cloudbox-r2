@@ -115,7 +115,7 @@ const SETUP_MARKER_KIND = "cloudbox-r2-setup-namespace-v1";
 const SETUP_MARKER_FILE = ".cloudbox-r2-setup-managed";
 const MANAGED_TARGET_MARKER_KIND = "cloudbox-r2-bootstrap-target-v1";
 const MANAGED_TARGET_MARKER_FILE = ".cloudbox-r2-bootstrap-managed.json";
-const REMOTE_MJS_CACHE_FILE = `install_cloudbox-${REMOTE_MJS_REF}.mjs`;
+const REMOTE_MJS_CACHE_NAME = /^install_cloudbox-[0-9a-f]{40}\.mjs$/i;
 const SETUP_MARKER_CONTENT = `${SETUP_MARKER_KIND}\n`;
 
 function resolveRoot(root = ROOT) {
@@ -231,17 +231,21 @@ export async function cleanupMjsCache({
 } = {}) {
 	if (typeof rmImpl !== "function") fail("MJS 缓存清理器无效。");
 	if (typeof scriptPath !== "string" || !scriptPath) return false;
-	const cacheHome =
-		typeof env?.XDG_CACHE_HOME === "string" && env.XDG_CACHE_HOME
-			? env.XDG_CACHE_HOME
-			: typeof env?.HOME === "string" && env.HOME
-				? path.join(env.HOME, ".cache")
-				: null;
-	if (!cacheHome) return false;
-	if (!path.isAbsolute(cacheHome)) fail("MJS 缓存根目录必须是绝对路径。");
-	const cacheDirectory = path.resolve(cacheHome, "cloudbox-r2");
+	const cacheRoot =
+		process.platform === "win32"
+			? typeof env?.LOCALAPPDATA === "string" && env.LOCALAPPDATA
+				? path.join(env.LOCALAPPDATA, "cloudbox-r2", "cache")
+				: null
+			: typeof env?.XDG_CACHE_HOME === "string" && env.XDG_CACHE_HOME
+				? path.join(env.XDG_CACHE_HOME, "cloudbox-r2")
+				: typeof env?.HOME === "string" && env.HOME
+					? path.join(env.HOME, ".cache", "cloudbox-r2")
+					: null;
+	if (!cacheRoot) return false;
+	if (!path.isAbsolute(cacheRoot)) fail("MJS 缓存根目录必须是绝对路径。");
+	const cacheDirectory = path.resolve(cacheRoot);
 	const resolvedScript = path.resolve(scriptPath);
-	if (path.basename(resolvedScript) !== REMOTE_MJS_CACHE_FILE) return false;
+	if (!REMOTE_MJS_CACHE_NAME.test(path.basename(resolvedScript))) return false;
 	const cacheInfo = await lstatOrNull(cacheDirectory);
 	if (!cacheInfo) return false;
 	if (cacheInfo.isSymbolicLink() || !cacheInfo.isDirectory())
@@ -251,9 +255,12 @@ export async function cleanupMjsCache({
 	if (scriptInfo.isSymbolicLink() || !scriptInfo.isFile())
 		fail("固定 MJS 缓存必须是普通文件。");
 	const realCacheDirectory = await realpath(cacheDirectory);
+	const realScript = await realpath(resolvedScript);
+	const relative = path.relative(realCacheDirectory, realScript);
 	if (
-		(await realpath(resolvedScript)) !==
-		path.join(realCacheDirectory, REMOTE_MJS_CACHE_FILE)
+		!relative ||
+		path.dirname(relative) !== "." ||
+		path.basename(relative) !== path.basename(resolvedScript)
 	)
 		fail("固定 MJS 缓存路径校验失败。");
 	await rmImpl(resolvedScript, { force: true });
@@ -648,8 +655,10 @@ function killChild(child, signal, killProcessGroup) {
 			Number.isSafeInteger(pid) &&
 			pid > 0
 		) {
-			spawn(
-				"taskkill",
+			const systemRoot = process.env.SystemRoot ?? "C:\\Windows";
+			const taskkill = path.join(systemRoot, "System32", "taskkill.exe");
+			const killer = spawn(
+				taskkill,
 				["/PID", String(pid), "/T", ...(signal === "SIGKILL" ? ["/F"] : [])],
 				{
 					shell: false,
@@ -657,6 +666,8 @@ function killChild(child, signal, killProcessGroup) {
 					stdio: "ignore",
 				},
 			);
+			killer.once("error", () => {});
+			killer.once("close", () => {});
 			return;
 		}
 		if (killProcessGroup && process.platform !== "win32" && pid > 0)
@@ -872,13 +883,16 @@ export async function ensurePnpm({
 	const resolvedRoot = resolveRoot(root);
 	npm ??= await npmPath();
 	const configured = "pnpm";
-	const version = await run(configured, ["--version"], {
-		capture: true,
-		timeoutMs: WORKFLOW_TIMEOUT_MS,
-		env: cleanParentEnv(),
-		root: resolvedRoot,
-		killProcessGroup: true,
-	}).catch(() => null);
+	const version =
+		process.platform === "win32"
+			? null
+			: await run(configured, ["--version"], {
+					capture: true,
+					timeoutMs: WORKFLOW_TIMEOUT_MS,
+					env: cleanParentEnv(),
+					root: resolvedRoot,
+					killProcessGroup: true,
+				}).catch(() => null);
 	if (version) assertCommandSafe(version, "检查 pnpm");
 	if (version?.code === 0 && version.stdout.trim() === expected)
 		return { command: configured, args: [] };
@@ -1672,6 +1686,29 @@ function archiveLimits(limits = {}) {
 	return values;
 }
 
+const WINDOWS_RESERVED_NAMES = new Set([
+	"CON",
+	"PRN",
+	"AUX",
+	"NUL",
+	...Array.from({ length: 9 }, (_, index) => `COM${index + 1}`),
+	...Array.from({ length: 9 }, (_, index) => `LPT${index + 1}`),
+]);
+
+function assertPortableArchivePart(part) {
+	if (
+		[...part].some(
+			(character) =>
+				character.charCodeAt(0) < 0x20 || '<>:"|?*'.includes(character),
+		) ||
+		/[ .]$/.test(part)
+	)
+		fail("归档路径包含 Windows 不允许的文件名。");
+	const stem = part.split(".", 1)[0].toUpperCase();
+	if (WINDOWS_RESERVED_NAMES.has(stem))
+		fail("归档路径包含 Windows 保留设备名。");
+}
+
 function archivePathInfo(value) {
 	if (typeof value !== "string" || value.length === 0 || value.includes("\0"))
 		fail("归档包含无效路径。");
@@ -1685,6 +1722,7 @@ function archivePathInfo(value) {
 		parts.some((part) => part.length === 0 || part === "." || part === "..")
 	)
 		fail("归档路径不得包含空段、. 或 .. 段。");
+	for (const part of parts) assertPortableArchivePart(part);
 	const topLevel = parts.shift();
 	const relative = parts.join("/");
 	return {
@@ -2442,11 +2480,15 @@ export async function installTar({
 export function assertSupportedBuildPlatform(
 	platform = process.platform,
 	ref = DEFAULT_SOURCE_REF,
+	architecture = process.arch,
 ) {
-	if (platform === "win32")
-		fail(
-			`固定源码 ${ref} 的构建脚本使用 Unix rm/cp；Windows 暂不支持（本地兼容 build 版本尚未发布）。`,
-		);
+	if (platform === "win32") {
+		if (architecture !== "x64") fail("Windows 原生首次部署仅支持 64 位 x64。");
+		if (ref !== DEFAULT_SOURCE_REF)
+			fail(
+				`Windows 原生首次部署只支持已验证的固定源码 ${DEFAULT_SOURCE_REF}；自定义 --ref 暂不支持。`,
+			);
+	}
 	return platform;
 }
 

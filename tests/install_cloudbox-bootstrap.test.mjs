@@ -963,10 +963,17 @@ test("bootstrap returns an owned target that the main cleanup can remove", async
 	}
 });
 
-test("rejects Windows before using the Unix build script", () => {
+test("allows verified Windows x64 and rejects unsupported Windows targets", () => {
+	assert.doesNotThrow(() =>
+		assertSupportedBuildPlatform("win32", DEFAULT_SOURCE_REF, "x64"),
+	);
 	assert.throws(
-		() => assertSupportedBuildPlatform("win32"),
-		/Windows 暂不支持/,
+		() => assertSupportedBuildPlatform("win32", DEFAULT_SOURCE_REF, "arm64"),
+		/仅支持 64 位 x64/,
+	);
+	assert.throws(
+		() => assertSupportedBuildPlatform("win32", "0".repeat(40), "x64"),
+		/只支持已验证的固定源码/,
 	);
 	assert.doesNotThrow(() => assertSupportedBuildPlatform("darwin"));
 	assert.doesNotThrow(() => assertSupportedBuildPlatform("linux"));
