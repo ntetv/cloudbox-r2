@@ -25,6 +25,12 @@ function Fail([string] $Message) {
     exit 1
 }
 
+try {
+    Add-Type -AssemblyName System.Net.Http
+} catch {
+    Fail "无法加载 .NET System.Net.Http 组件。"
+}
+
 function Assert-WindowsX64 {
     if (-not [Environment]::Is64BitOperatingSystem -or -not [Environment]::Is64BitProcess) {
         Fail "Windows 原生首次部署仅支持 64 位 x64。"
