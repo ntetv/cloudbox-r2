@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]] $RemainingArgs
@@ -249,7 +249,7 @@ function Extract-NodeZip([string] $ArchivePath, [string] $Destination) {
             if ($parts[0] -ne $NodeDirectoryName) { Fail "Node ZIP 顶级目录不匹配。" }
             $target = Join-Path $Destination ($trimmed.Replace('/', '\'))
             $fullTarget = [IO.Path]::GetFullPath($target)
-            $fullRoot = [IO.Path]::GetFullPath($Destination).TrimEnd('\') + '\'
+            $fullRoot = [IO.Path]::GetFullPath($Destination) + [IO.Path]::DirectorySeparatorChar
             if (-not $fullTarget.StartsWith($fullRoot, [StringComparison]::OrdinalIgnoreCase)) { Fail "Node ZIP 路径越出 staging。" }
             if ($directoryEntry) {
                 Ensure-Directory $fullTarget
