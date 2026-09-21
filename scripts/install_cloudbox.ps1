@@ -7,8 +7,8 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$PayloadRef = "3e25bce90a933d1f6f25975ad134cb45c6dd3546"
-$PayloadSha256 = "cb992e322b167e13341dabaf69f896eb4404e0b357bd52bab873e9a57af1a948"
+$PayloadRef = "d4082e36f6edb2bf61ece3a4dddd474c6dfd4ef9"
+$PayloadSha256 = "bb576806ad5a05b85850bd3fae6a59632369d0216cf4013fcef84d779fc71b12"
 $NodeVersion = "22.23.2"
 $NodeArchive = "node-v22.23.2-win-x64.zip"
 $NodeSha256 = "1177b4137ba5adaa56354ae40f1080c7450e8ae09cecb47da459d1c52ac99f97"

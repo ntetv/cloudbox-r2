@@ -6,8 +6,8 @@ NODE_VERSION=22.23.2
 NODE_RELEASE_URL="https://nodejs.org/download/release/v${NODE_VERSION}"
 
 # Fixed release of the standalone MJS payload.
-REMOTE_MJS_REF=3e25bce90a933d1f6f25975ad134cb45c6dd3546
-REMOTE_MJS_SHA256=cb992e322b167e13341dabaf69f896eb4404e0b357bd52bab873e9a57af1a948
+REMOTE_MJS_REF=d4082e36f6edb2bf61ece3a4dddd474c6dfd4ef9
+REMOTE_MJS_SHA256=bb576806ad5a05b85850bd3fae6a59632369d0216cf4013fcef84d779fc71b12
 
 staging=
 node_command=
