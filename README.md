@@ -72,12 +72,12 @@ Shell 启动器会优先验证并调用同目录、且位于完整仓库标记�
 ```bash
 node /root/install_cloudbox.mjs
 # 可选：指定另一个完整 40 位 commit SHA
-node /root/install_cloudbox.mjs --ref b168336b35c4a6d93c97c18dcfab17cc8c46ac00
+node /root/install_cloudbox.mjs --ref 4381495afa9278cc2c83a2638707b5d6ce4ffb98
 ```
 
 Shell 启动器会复用当前 PATH 中可解析为 Node.js `22` 或更高版本的 `node`。如果 Node 缺失、版本过低或输出异常，它只在用户目录 `${XDG_DATA_HOME:-$HOME/.local/share}/cloudbox-r2/node-v22.23.2-<platform>` 准备固定的官方 Node.js `22.23.2`，校验固定 SHA-256 后再原子发布；不会修改 shell profile、系统目录或全局 PATH。支持 macOS x64/arm64，以及使用 glibc 的 Linux x64/arm64；musl、Windows 和其他架构会明确拒绝。下载只使用固定的 `https://nodejs.org/download/release/v22.23.2/` HTTPS 地址。单独复制并执行 Shell 启动器也可用；没有受信任 sibling 时，它只从固定的 `https://raw.githubusercontent.com/ntetv/cloudbox-r2/d9d36a3173e7647c9007f8640b75ad75ed924dcf/scripts/install_cloudbox.mjs` 下载远程 MJS，强制 HTTPS、重定向和超时限制，并校验固定 SHA-256 `a8d9c520da5716337ee1addbfc4d1e9707d39f8796726557dd9ab9ac248a6cd1` 后，以私有 staging 原子缓存到 `${XDG_CACHE_HOME:-$HOME/.cache}/cloudbox-r2/install_cloudbox-d9d36a3173e7647c9007f8640b75ad75ed924dcf.mjs`（mode `700`）。每次启动都会重新校验已有缓存；损坏或不匹配时拒绝执行且不会覆盖，下载失败只清理本次 staging。Shell 不读取或记录 Cloudflare Token，下载完成后仍以原参数、cwd 和 TTY `exec` Node。
 
-单文件模式默认固定 `ntetv/cloudbox-r2` commit `b168336b35c4a6d93c97c18dcfab17cc8c46ac00`，只从 HTTPS `codeload.github.com` 下载源码，并在当前 cwd 创建 `cloudbox-r2-b168336b35c4`。目标已存在时会拒绝且不覆盖。源码下载完成后才会收集 Token；解包使用 npm registry 的固定 `tar@7.5.14`（Node.js `>=22`，固定 tarball SRI 与隐藏 npm lock、完整传递依赖版本/resolved/integrity 校验、通过 npm `--ignore-scripts` 安装），并在受限 Node worker 中执行，带固定内存、时间、输出、下载和解压大小上限，不调用系统 `tar`。网络需要访问 `codeload.github.com` 和 `registry.npmjs.org`；该流程不使用 Git、GitHub API 或远端源码中不存在的 setup 文件。
+单文件模式默认固定 `ntetv/cloudbox-r2` commit `4381495afa9278cc2c83a2638707b5d6ce4ffb98`，只从 HTTPS `codeload.github.com` 下载源码，并在当前 cwd 创建 `cloudbox-r2-b168336b35c4`。目标已存在时会拒绝且不覆盖。源码下载完成后才会收集 Token；解包使用 npm registry 的固定 `tar@7.5.14`（Node.js `>=22`，固定 tarball SRI 与隐藏 npm lock、完整传递依赖版本/resolved/integrity 校验、通过 npm `--ignore-scripts` 安装），并在受限 Node worker 中执行，带固定内存、时间、输出、下载和解压大小上限，不调用系统 `tar`。网络需要访问 `codeload.github.com` 和 `registry.npmjs.org`；该流程不使用 Git、GitHub API 或远端源码中不存在的 setup 文件。
 
 需要官方 Node.js 22+（含 npm）；向导会在目标源码的隔离目录准备固定版本 pnpm 9.15.4，并使用锁定的 Wrangler 4.51.0。单文件模式只支持 Linux/macOS，因为固定 commit 的构建脚本包含 Unix `rm`/`cp`；Windows 会在构建前明确拒绝，本地兼容 build 版本尚未发布。它只支持交互式终端，会显示部署前检查和开始部署两个固定状态，先构建和 dry-run 检查，再在明确确认后创建新的 Worker、专用 R2 bucket、七个 Worker secrets 并部署。每次只能使用全新的 Worker 和 bucket 名称；向导不会覆盖、迁移、恢复或卸载现有资源。源码准备期间收到 SIGINT/SIGTERM 会清理向导拥有的临时目录和侧锁；SIGKILL 无法被捕获，不能保证本机清理，但侧锁会记录向导标记、PID 和时间，下一次仅在确认 PID 已不存在且锁确属本向导时回收，其他锁不会删除。
 
