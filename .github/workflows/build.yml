@@ -19,8 +19,8 @@ jobs:
         run: npm install --global pnpm@9.15.4
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Check setup launcher
-        run: pnpm test:setup
+      - name: Check POSIX binary launcher
+        run: pnpm test:posix-launcher
       - name: Check lint
         run: pnpm run lint:posix
       - name: Build
@@ -57,20 +57,17 @@ jobs:
         run: npm install --global pnpm@9.15.4
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Parse PowerShell helper
-        shell: powershell
-        run: |
-          $tokens = $null
-          $errors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile("scripts/install_cloudbox.ps1", [ref]$tokens, [ref]$errors) | Out-Null
-          if ($errors.Count -gt 0) { $errors | Out-String | Write-Error; exit 1 }
-      - name: Run Windows launcher tests
-        run: pnpm test:windows-launcher
-      - name: Run cross-platform MJS tests
-        run: node --test tests/install_cloudbox.test.mjs tests/install_cloudbox-flow.test.mjs tests/install_cloudbox-workflow.test.mjs
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.24.x"
+      - name: Test Go deployer
+        working-directory: tools/cloudbox-deployer
+        run: go test ./...
+      - name: Build Windows amd64 deployer
+        working-directory: tools/cloudbox-deployer
+        run: go build -o cloudbox_deployer-windows-amd64.exe ./cmd/cloudbox-deployer
       - name: Build
         run: pnpm build
       - name: Check package
         run: pnpm --filter ./packages/worker package
-      - name: BAT help smoke test
-        run: cmd /d /s /c "scripts\install_cloudbox.bat --help"

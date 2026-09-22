@@ -26,6 +26,12 @@ packages/worker/README.md
 *.p12
 *.pfx
 
+tools/cloudbox-deployer/internal/embedded/generated.go
+tools/cloudbox-deployer/bin/
+tools/cloudbox-deployer/cloudbox_deployer
+tools/cloudbox-deployer/cloudbox_deployer-*
+tools/cloudbox-deployer/releases/
+
 # Local reports and caches
 coverage/
 **/coverage/

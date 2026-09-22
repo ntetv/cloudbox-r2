@@ -1,32 +1,41 @@
+import { spawn } from "node:child_process";
 import { cp, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { runCommand } from "../../../scripts/install_cloudbox.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const workerDirectory = path.resolve(scriptDirectory, "..");
 const rootDirectory = path.resolve(workerDirectory, "../..");
 
-async function run(command, args) {
-	const result = await runCommand(command, args, {
-		root: workerDirectory,
-		capture: true,
-		timeoutMs: 120_000,
+function run(command, args) {
+	return new Promise((resolve, reject) => {
+		const child = spawn(command, args, {
+			cwd: workerDirectory,
+			stdio: ["ignore", "pipe", "pipe"],
+			shell: false,
+		});
+		const stdout = [];
+		const stderr = [];
+		child.stdout.on("data", (chunk) => stdout.push(chunk));
+		child.stderr.on("data", (chunk) => stderr.push(chunk));
+		child.once("error", reject);
+		child.once("close", (code, signal) => {
+			const result = {
+				code,
+				signal,
+				stdout: Buffer.concat(stdout).toString(),
+				stderr: Buffer.concat(stderr).toString(),
+			};
+			if (result.stdout) process.stdout.write(result.stdout);
+			if (result.stderr) process.stderr.write(result.stderr);
+			if (code !== 0) reject(new Error(`${command} exited with ${code ?? signal}`));
+			else resolve(result);
+		});
 	});
-	if (result.stdout) process.stdout.write(result.stdout);
-	if (result.stderr) process.stderr.write(result.stderr);
-	if (result.timedOut) throw new Error(`${command} timed out`);
-	if (result.stdoutTruncated || result.stderrTruncated)
-		throw new Error(`${command} output exceeded the limit`);
-	if (result.code !== 0)
-		throw new Error(`${command} exited with ${result.code ?? result.signal}`);
 }
 
 await run(process.execPath, [
-	path.join(
-		rootDirectory,
-		"packages/dashboard/scripts/build-cloudbox-assets.mjs",
-	),
+	path.join(rootDirectory, "packages/dashboard/scripts/build-cloudbox-assets.mjs"),
 ]);
 await rm(path.join(workerDirectory, "dist"), { recursive: true, force: true });
 await rm(path.join(workerDirectory, "dashboard"), {

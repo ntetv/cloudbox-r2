@@ -9,12 +9,12 @@
 直接下载安装脚本（macOS/Linux）：
 
 ```bash
-curl -fSsLO https://raw.githubusercontent.com/ntetv/cloudbox-r2/main/scripts/install_cloudbox.sh
+curl -fSsLO https://raw.githubusercontent.com/ntetv/cloudbox-r2/main/install_cloudbox.sh
 chmod +x install_cloudbox.sh
-bash install_cloudbox.sh
+./install_cloudbox.sh
 ```
 
-安装脚本会自动准备 Node.js、下载固定版本源码、安装依赖并启动首次部署向导。
+Shell 启动器会自动识别 macOS/Linux 和 CPU 架构，从固定的 `tool/` 路径下载对应 Go 部署二进制，校验 SHA-256 后直接启动部署向导。运行用户不需要 Node.js、pnpm、Wrangler 或 Go。
 
 ## 核心能力
 
@@ -53,112 +53,105 @@ Worker 负责所有路由。未知路径不会回退到访客页面，错误的�
 
 根目录 `wrangler.toml` 直接引用 `src/index.ts`（其直接引用 `packages/worker/src/index.ts`）和构建后的 `packages/dashboard/dist`，不依赖 npm 包或 tarball。默认配置保持模板语义：`readonly: false`，公开整个绑定 bucket（隐藏内部对象除外），并使用初始 `v1-cloudbox-r2` migration。
 
-## 仅 Cloudflare 账号的本地首次部署
+## macOS/Linux 单文件部署
 
-已有完整源码时，在仓库根目录运行：
-
-```bash
-bash scripts/install_cloudbox.sh
-```
-
-没有完整仓库时，也可以只保存 Shell 启动器并在想要放置源码的父目录运行：
+只需要下载根目录 Shell 启动器：
 
 ```bash
-bash /root/install_cloudbox.sh
+curl -fSsLO https://raw.githubusercontent.com/ntetv/cloudbox-r2/main/install_cloudbox.sh
+chmod +x install_cloudbox.sh
+./install_cloudbox.sh
 ```
 
-Shell 启动器会优先验证并调用同目录、且位于完整仓库标记下的 `scripts/install_cloudbox.mjs`；不会因为临时目录中出现同名文件就执行。若只需要直接运行现有 MJS，也可以把仓库中的 `scripts/install_cloudbox.mjs` 单独保存为 `/root/install_cloudbox.mjs`，然后在想要放置源码的父目录运行：
+启动器会自动判断：
 
-```bash
-node /root/install_cloudbox.mjs
-# 可选：指定另一个完整 40 位 commit SHA
-node /root/install_cloudbox.mjs --ref 4381495afa9278cc2c83a2638707b5d6ce4ffb98
-```
+- macOS Apple Silicon：`darwin-arm64`
+- macOS Intel：`darwin-amd64`
+- Linux x64：`linux-amd64`
+- Linux x86：`linux-386`
+- Linux ARM64：`linux-arm64`
+- Linux ARMv7：`linux-armv7`
 
-Shell 启动器会复用当前 PATH 中可解析为 Node.js `22` 或更高版本的 `node`。如果 Node 缺失、版本过低或输出异常，它只在用户目录 `${XDG_DATA_HOME:-$HOME/.local/share}/cloudbox-r2/node-v22.23.2-<platform>` 准备固定的官方 Node.js `22.23.2`，校验固定 SHA-256 后再原子发布；不会修改 shell profile、系统目录或全局 PATH。支持 macOS x64/arm64，以及使用 glibc 的 Linux x64/arm64；musl 和其他架构会明确拒绝。Windows 使用独立的 BAT/PowerShell 入口。下载只使用固定的 `https://nodejs.org/download/release/v22.23.2/` HTTPS 地址。单独复制并执行 Shell 启动器也可用；没有受信任 sibling 时，它只从固定的 `https://raw.githubusercontent.com/ntetv/cloudbox-r2/d4082e36f6edb2bf61ece3a4dddd474c6dfd4ef9/scripts/install_cloudbox.mjs` 下载远程 MJS，强制 HTTPS、重定向和超时限制，并校验固定 SHA-256 `bb576806ad5a05b85850bd3fae6a59632369d0216cf4013fcef84d779fc71b12` 后，以私有 staging 原子缓存到 `${XDG_CACHE_HOME:-$HOME/.cache}/cloudbox-r2/install_cloudbox-d4082e36f6edb2bf61ece3a4dddd474c6dfd4ef9.mjs`（mode `700`）。每次启动都会重新校验已有缓存；损坏或不匹配时拒绝执行且不会覆盖，下载失败只清理本次 staging。Shell 不读取或记录 Cloudflare Token，下载完成后仍以原参数、cwd 和 TTY `exec` Node。
+随后从固定的 `tool/` 路径下载对应的 `cloudbox_deployer-*`，校验 SHA-256、设置私有权限并直接执行。用户不需要安装 Node.js、pnpm、Wrangler 或 Go。
 
-单文件模式默认固定 `ntetv/cloudbox-r2` commit `4381495afa9278cc2c83a2638707b5d6ce4ffb98`，只从 HTTPS `codeload.github.com` 下载源码，并在当前 cwd 创建 `cloudbox-r2-4381495afa92`。目标已存在时会拒绝且不覆盖。源码下载完成后才会收集 Token；解包使用 npm registry 的固定 `tar@7.5.14`（Node.js `>=22`，固定 tarball SRI 与隐藏 npm lock、完整传递依赖版本/resolved/integrity 校验、通过 npm `--ignore-scripts` 安装），并在受限 Node worker 中执行，带固定内存、时间、输出、下载和解压大小上限，不调用系统 `tar`。网络需要访问 `codeload.github.com` 和 `registry.npmjs.org`；该流程不使用 Git、GitHub API 或远端源码中不存在的 setup 文件。
+二进制直接进入部署向导，不接受额外命令或测试参数。默认使用内嵌的 Worker/Dashboard artifact，部署流程会创建全新的 Worker、R2 bucket，应用 Durable Objects migration，写入七项 secrets，并启用 Worker 的 `workers.dev` subdomain。
 
-需要官方 Node.js 22+（含 npm）；向导会在目标源码的隔离目录准备固定版本 pnpm 9.15.4，并使用锁定的 Wrangler 4.51.0。POSIX 单文件模式使用 `install_cloudbox.sh`，Windows 原生模式使用同目录的 `install_cloudbox.bat` 和 `install_cloudbox.ps1`。Windows 首版只支持 64 位 x64；Windows runtime 会安装到 `%LOCALAPPDATA%\cloudbox-r2`，不修改系统 PATH 或用户 profile。向导会显示部署前检查和开始部署两个固定状态，先构建和 dry-run 检查，再在明确确认后创建新的 Worker、专用 R2 bucket、七个 Worker secrets 并部署。每次只能使用全新的 Worker 和 bucket 名称；向导不会覆盖、迁移、恢复或卸载现有资源。源码准备期间收到 SIGINT/SIGTERM 会清理向导拥有的临时目录和侧锁；SIGKILL 无法被捕获，不能保证本机清理，但侧锁会记录向导标记、PID 和时间，下一次仅在确认 PID 已不存在且锁确属本向导时回收，其他锁不会删除。
+下载的二进制临时保存在 `install_cloudbox.sh` 同目录，部署器退出后自动删除；正常完成或失败都只保留 Shell 脚本。若进程被 `SIGKILL` 强制终止，系统无法执行清理，需要人工删除同目录残留的 `cloudbox_deployer-*` 文件。
 
-Windows 原生首次部署（Windows 11 x64）：
+SHA-256 不匹配时拒绝执行，不覆盖现有文件。Shell 启动器不读取或记录 Cloudflare Token。
+
+> 当前源码中的下载 pin 使用发布分支和固定 SHA-256。正式发布前应将 `BINARY_REF` 替换为包含 `tool/` 二进制的固定 40 位 commit SHA。
+
+## Windows 单文件部署
+
+Windows 使用独立的 amd64 二进制：
 
 ```bat
-curl.exe -fSsLO https://raw.githubusercontent.com/ntetv/cloudbox-r2/main/scripts/install_cloudbox.bat
-curl.exe -fSsLO https://raw.githubusercontent.com/ntetv/cloudbox-r2/main/scripts/install_cloudbox.ps1
-install_cloudbox.bat
+curl.exe -fSsLO https://raw.githubusercontent.com/ntetv/cloudbox-r2/main/tool/cloudbox_deployer-windows-amd64.exe
+cloudbox_deployer-windows-amd64.exe
 ```
 
-BAT 只负责启动同目录 PowerShell helper；PowerShell 负责固定 Node.js、MJS 下载和 SHA-256 校验。Windows 模式只接受已验证的默认源码快照，不接受自定义 `--ref`。CI 会在 `windows-latest` 验证构建和 `--help` smoke；真实 Windows Terminal 的交互、Ctrl+C 和首次部署仍需单独人工验证。Windows ARM64、x86、Windows 10 和 Windows Server 不在首版支持范围内。
+Windows amd64 已完成真实部署验证。Windows x86/ARM64 二进制已生成，但仍需分别进行目标机验证。
 
-无论真实部署成功、失败、取消，还是 bucket/secrets 已部分写入后失败，向导都会在主流程 `finally` 中尝试清理本次 standalone bootstrap 生成的 `cloudbox-r2-<SHA 前 12 位>` 源码副本、`.wrangler/setup` 内的配置/pnpm/tar 临时目录和日志，以及当前执行的固定远程 MJS 缓存。完整用户仓库模式不会删除仓库源码；只清理传入 root 下的 `.wrangler/setup` 命名空间，不碰其他 `.wrangler` 状态。`${XDG_DATA_HOME:-$HOME/.local/share}/cloudbox-r2/node-v...` 官方 Node.js 用户缓存会保留，sibling 模式脚本和根源码会保留。清理只使用 Node 文件 API、精确的本次调用标记和路径校验，不执行资源删除命令；不会删除或修改任何 GitHub 历史 commit，也不会删除 R2、Worker、Durable Objects 或 secrets。SIGKILL 发生在 `finally` 之前时仍可能留下这些本机生成物，需要人工检查。
+## API Token 和权限
 
-部署成功后，向导会合并 Wrangler 的 stdout 和 stderr，只接受与所选 Worker 匹配的 `https://<worker>.<account>.workers.dev` 地址；若 Wrangler 没有输出地址，向导会使用当前 API Token 请求账号 Workers subdomain API（`GET /accounts/<ACCOUNT_ID>/workers/subdomain`），严格校验 `result.subdomain` 后组合出 `https://<worker>.<subdomain>.workers.dev`。地址找到后会检查首页；首页响应未包含预期页面标记时，部署地址仍会输出，同时显示首页验证警告，便于手动访问排查。API 不可用、响应无效、关闭 `workers_dev` 或使用自定义域名时，部署仍视为成功，并提示到 Cloudflare Dashboard 查看域名配置。
+请在 Cloudflare Dashboard 创建账号范围 API Token。至少需要：
 
-需要先在 Cloudflare Dashboard 创建一个**账号范围** API Token。向导只接受此 Token 和单独输入的 32 位十六进制 Cloudflare 账号 ID；账号 ID 不是第二个凭据。当前交互模式会显式显示所有手动输入，包括 API Token、管理入口和管理员密码；向导不会主动把这些值写入 npm/pnpm、构建命令、参数、配置或 Wrangler 日志，但终端本身可能被录屏、共享屏幕、SSH 审计或旁观者捕获，请只在可信终端运行。Token 仍只在当前进程内存中保存，并仅注入 Wrangler 子进程和固定 Cloudflare API 请求的 `Authorization` header。向导不会调用 `wrangler login`、OAuth、浏览器登录、Global API Key 或邮箱密码，也不依赖本机已有 OAuth 状态。
+- Workers 脚本部署/编辑。
+- R2 bucket 创建与管理。
+- Durable Objects namespace/migration 管理。
+- Workers Assets 所属的 Worker 脚本部署权限。
 
-请在 Cloudflare 官方 [API Token 权限参考](https://developers.cloudflare.com/fundamentals/api/reference/permissions/) 和 [Workers 授权说明](https://developers.cloudflare.com/workers/authorization/workers/) 中按当前界面选择最小的账号级权限：Worker 脚本部署/编辑、R2 bucket 创建与管理、Durable Objects namespace/migration 管理，以及 Workers Assets 所属的 Worker 脚本部署权限；仅当使用路由或自定义域名时再增加对应的 Routes 权限。优先使用官方 “Edit Cloudflare Workers” 模板后收窄到目标账号，并按权限参考核对当前名称，不要凭旧名称创建权限。Token 必须能读取目标账号的 Worker 部署列表和 R2 bucket 信息；向导会用这些只读请求预检权限，不要求 `whoami`、用户或邮箱权限。
+部署器会在终端显式显示 API Token、管理入口和管理员密码；不要在共享、录屏或审计终端运行。Token 只保存在当前进程内存，并通过 HTTPS `Authorization` header 发送到 Cloudflare API。
 
-部署前请确认：未加锁的公开对象可被访客访问，Cloudflare 资源可能产生费用。云端写入不是原子事务，失败时不会自动删除已创建资源；请按错误提示人工检查。真实云端写入和真实 Token 未在本地验证。
+部署前请确认：未加锁的公开对象可被访客访问，Cloudflare 资源可能产生费用。云端写入不是原子事务，失败时不会自动删除已创建资源；请按错误提示人工检查。
 
 ## 推荐部署方式
 
-### 1. 准备环境
+### 1. 运行单文件部署器
 
-需要 Cloudflare Workers、R2 和 Durable Objects 权限、Node.js `22` 或更高版本，以及 pnpm `9.15.4`。仓库脚本使用 workspace 内固定的 Wrangler `4.51.0`，不使用 `npx` 随机安装。
-
-根配置默认 Worker 和 bucket 名称均为 `cloudbox-r2`，这是未确认的目标占位配置，不代表已存在或已授权的生产资源。首次部署向导中，Worker 和 R2 bucket 输入直接回车也会分别使用 `cloudbox-r2`；非空输入仍必须符合名称格式。部署前请审核账号、资源名称和计费影响；如需不同名称，可在提示处输入自定义名称。默认名称或自定义名称只要已存在，向导都会停止，不覆盖或复用资源。向导会读取根配置中的唯一顶层 Worker `name` 和唯一 `bucket_name` 字段生成临时配置，不要求它们仍叫 `cloudbox-r2`；`validate-deploy-config` 默认只校验必要结构，也可通过 `--worker-name` 与 `--bucket-name` 校验动态配置。单文件下载会额外校验快照身份仍是固定源项目默认名称，避免把未预期的源码变体当成下载结果；向导始终先执行结构校验，只有快照自带 validator 支持动态参数时才调用 pnpm validator，旧快照的品牌硬编码不会阻断自定义名称。
-
-### 2. 使用 Token 检查配置
+macOS/Linux：
 
 ```bash
-pnpm install --frozen-lockfile --offline
-# 先以安全方式在当前 shell 注入 CLOUDFLARE_API_TOKEN（不要写入命令历史）
-pnpm --filter ./packages/worker exec wrangler --version
-pnpm validate-deploy-config
+./install_cloudbox.sh
 ```
 
-### 3. 构建并预览部署
+Windows amd64：
 
-```bash
-pnpm deploy:dry-run
+```bat
+cloudbox_deployer-windows-amd64.exe
 ```
 
-Wrangler 当前支持在部署时自动创建缺失的 R2 bucket；本配置不会绑定已知旧资源。若当前 Wrangler 或账号策略不允许自动创建，请在审核后手动创建与 `wrangler.toml` 相同名称的全新 bucket，再重试部署。应用不会导入其他 bucket 的对象或 Metadata。
+二进制直接进入部署向导，不接受子命令。启动器会自动识别 macOS/Linux 架构，下载 `tool/` 中对应的固定二进制并校验 SHA-256。
 
-### 4. 首次部署 Worker
+### 2. 部署前确认
 
-确认 dry-run 输出、Worker 名称、bucket 名称和绑定均正确后，手动执行：
-
-```bash
-pnpm deploy
-```
-
-首次部署会根据当前 `wrangler.toml` 创建 Worker 和 Durable Object classes，并应用初始 `v1-cloudbox-r2` SQLite migration。保持 migration tag 和 class 列表一致，不要绑定现有生产资源。
-
-在 secrets 设置完成前，Worker 可能对请求返回：
+向导会显示：
 
 ```text
-Cloudbox R2 configuration unavailable
+Cloudflare 账号 ID
+Worker 名称
+R2 bucket 名称
+应用版本
 ```
 
-这是缺少必需 secret 时的 fail-closed 行为。
+确认前不会显示 Token、管理员密码或生成的安全 secret。默认 Worker 和 bucket 名称都是 `cloudbox-r2`，直接回车使用默认值；实际测试建议输入全新的名称。
 
-### 6. 设置 Worker secrets
+### 3. 部署流程
 
-逐条执行以下命令。Wrangler 会交互式读取值；不要把真实值直接写入 shell 命令、源码、`wrangler.toml` 或日志：
+确认后，部署器会依次：
 
-```bash
-pnpm --filter ./packages/worker exec wrangler secret put CLOUDBOX_R2_ADMIN_PATH
-pnpm --filter ./packages/worker exec wrangler secret put ADMIN_USERNAME
-pnpm --filter ./packages/worker exec wrangler secret put ADMIN_PASSWORD
-pnpm --filter ./packages/worker exec wrangler secret put ADMIN_SESSION_SECRET
-pnpm --filter ./packages/worker exec wrangler secret put PUBLIC_ACCESS_SESSION_SECRET
-pnpm --filter ./packages/worker exec wrangler secret put PUBLIC_ACCESS_PASSWORD_PEPPER
-pnpm --filter ./packages/worker exec wrangler secret put TRANSFER_SESSION_SECRET
-```
+1. 检查 Worker 和 R2 bucket 不存在。
+2. 创建专用 R2 bucket。
+3. 上传 Workers Assets。
+4. 上传 Worker 和 Durable Objects migration。
+5. 写入七项 Worker secrets。
+6. 启用 Worker `workers.dev` subdomain。
+7. 查询访问地址。
 
-secret 要求：
+云端写入不是原子事务。失败后不会自动删除已创建的 Worker、bucket、Durable Objects 或 secrets，请按阶段记录人工检查。
+
+### 4. Secret 要求
 
 | Secret | 要求 |
 | --- | --- |
@@ -167,35 +160,33 @@ secret 要求：
 | `ADMIN_PASSWORD` | 6–16 个 UTF-8 字节 |
 | 其他四项安全 secret | 每项至少 32 字节 |
 
-`ADMIN_USERNAME`、`ADMIN_PASSWORD` 和其他四项安全 secret 的六个值必须全部不同。5–12 个字符的限制只适用于管理入口名称，不适用于管理员密码或其他 secret；管理入口只需使用符合上述字符规则的单一 segment。如果 `CLOUDBOX_R2_ADMIN_PATH` 不符合规则，Worker 会返回 `503`，请重新生成管理入口值。
-
-管理入口实际地址为：
+管理入口实际地址：
 
 ```text
 https://<worker-domain>/<CLOUDBOX_R2_ADMIN_PATH>
 ```
 
-例如 secret 值由部署者自行生成后，实际 URL 会使用对应的单一路径 segment。不要在 README、截图、Issue 或公开日志中发布真实管理入口和 secret 值。
+不要在 README、截图、Issue 或公开日志中发布真实管理入口和 secret 值。
 
-### 7. 部署后检查
+### 5. 部署后检查
 
-先确认访客页面可访问：
+访客页面：
 
 ```bash
 curl -i https://<worker-domain>/
 ```
 
-再使用真实管理入口检查登录页：
+管理入口：
 
 ```bash
 curl -i https://<worker-domain>/<admin-path>
 ```
 
-预期结果：
+预期：
 
-- `/` 返回访客页面
-- 正确的自定义入口返回登录页面
-- 缺少或非法 `CLOUDBOX_R2_ADMIN_PATH` 时返回 `503`，不会启动无认证管理入口
+- `/` 返回访客页面。
+- 正确的自定义入口返回登录页面。
+- 缺少或非法管理入口时返回 `503`，不会启动无认证管理入口。
 
 ## 本地开发
 
