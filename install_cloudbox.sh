@@ -3,7 +3,7 @@ set -eu
 umask 077
 
 # 发布前将 main 替换为包含 tool/ 二进制和本启动器的固定 40 位 commit SHA。
-BINARY_REF=${CLOUDBOX_BINARY_REF:-main}
+BINARY_REF=${CLOUDBOX_BINARY_REF:-85e5888122ef43017f1a1146e7eeae4265476966}
 BINARY_BASE_URL="https://raw.githubusercontent.com/ntetv/cloudbox-r2/${BINARY_REF}/tool"
 
 script_directory=

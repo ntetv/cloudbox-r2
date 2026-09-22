@@ -8,7 +8,7 @@ import test from "node:test";
 
 const ROOT = path.resolve(new URL("..", import.meta.url).pathname);
 const LAUNCHER = path.join(ROOT, "install_cloudbox.sh");
-const REF = "main";
+const REF = "85e5888122ef43017f1a1146e7eeae4265476966";
 const SHAS = {
 	"darwin-arm64": "25f27cd58909b28b458aa42efe9ab895f3c83ee9b53c4b85254d898f662ff32d",
 	"darwin-amd64": "338ab6bc1d1502a432b948306ca02e6454d993bee11868a196277019cc8e6ed8",
@@ -132,7 +132,7 @@ for (const platform of Object.keys(SHAS)) {
 			const result = await runLauncher(fixture.root, fixture, ["argument with spaces"]);
 			assert.equal(result.code, 0, result.stderr);
 			const curl = await readFile(fixture.logs.curl, "utf8");
-			assert.match(curl, new RegExp(`/main/tool/cloudbox_deployer-${platform}`));
+			assert.match(curl, new RegExp(`/${REF}/tool/cloudbox_deployer-${platform}`));
 			const binaryLog = await readFile(fixture.logs.binary, "utf8");
 			assert.match(binaryLog, /arg=argument with spaces/);
 			const sameDirectoryBinary = path.join(fixture.root, `cloudbox_deployer-${platform}`);

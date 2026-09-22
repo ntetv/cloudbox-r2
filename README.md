@@ -80,7 +80,7 @@ chmod +x install_cloudbox.sh
 
 SHA-256 不匹配时拒绝执行，不覆盖现有文件。Shell 启动器不读取或记录 Cloudflare Token。
 
-> 当前源码中的下载 pin 使用发布分支和固定 SHA-256。正式发布前应将 `BINARY_REF` 替换为包含 `tool/` 二进制的固定 40 位 commit SHA。
+> 当前启动器固定使用 commit `85e5888122ef43017f1a1146e7eeae4265476966` 中的 `tool/` 二进制，并逐平台校验 SHA-256。
 
 ## Windows 单文件部署
 
