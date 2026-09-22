@@ -571,7 +571,7 @@ CPU 架构：
 - [x] P5 macOS 单文件候选版（artifact 生成/内嵌、直接运行部署入口已通过；正式签名和下载验收待后续）。
 - [ ] P6 macOS 验收。
 - [ ] P7 Windows/Linux 扩展（Windows amd64 已完成真实部署验证；Windows x86/ARM64、Linux 各架构和签名发布仍待完成）。
-- [ ] P8 发布入口切换（根 Shell 启动器和 tool 二进制已准备，GitHub 发布 pin/推送仍待授权）。
+- [x] P8 发布入口切换（根 Shell 启动器、tool 二进制已推送，启动器固定使用 commit `85e5888122ef43017f1a1146e7eeae4265476966`）。
 
 ### 本次执行记录
 
